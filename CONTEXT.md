@@ -2,11 +2,12 @@
 
 ## Vue d'ensemble
 
-Application PyQt6 de prise de notes avec support audio et images, stockage SQLite local.
+Application PyQt6 de prise de notes avec support audio, images et vidéos, stockage SQLite local.
 
 - **Version** : 1.0.0
 - **Stack** : Python 3.13, PyQt6, SQLite (`~/.local/share/Noteor/notes.db`)
-- **Venv** : `./venv/` (Python 3.13)
+- **Venv** : `./venv/` (Python 3.13) — absent de la machine actuelle, dépendances dans le Python système
+- **Dépôt GitHub** : https://github.com/nouhailler/Noteor (commit `8506f89`)
 
 ---
 
@@ -18,12 +19,12 @@ Noteor/
 ├── config.py                 # Constantes (chemins, audio, UI)
 ├── database.py               # Toute la couche SQLite (Database class)
 ├── core/
-│   ├── audio_recorder.py     # AudioRecorder + AudioPlayer (sounddevice/numpy)
-│   └── file_manager.py       # Copie/miniatures images, import texte, screenshots
+│   ├── audio_recorder.py     # AudioRecorder + AudioPlayer (arecord/aplay + sounddevice fallback)
+│   └── file_manager.py       # Copie/miniatures images, import texte/vidéo, screenshots
 └── ui/
     ├── main_window.py        # Fenêtre principale (3 panneaux via QSplitter)
     ├── editor.py             # EditorPanel — panneau droit (éditeur complet)
-    ├── widgets.py            # NoteItemDelegate, TagChip, AudioPlayerWidget, ImageThumbnailWidget
+    ├── widgets.py            # NoteItemDelegate, TagChip, AudioPlayerWidget, ImageThumbnailWidget, VideoPlayerWidget
     └── styles.py             # QSS global
 ```
 
@@ -32,7 +33,17 @@ Noteor/
 Tables : `notes`, `categories`, `tags`, `note_tags`, `attachments`
 - `notes` ← `categories` (FK nullable, SET NULL on delete)
 - `notes` ← `attachments` (FK CASCADE on delete)
-- `attachments.type` : `'image'` | `'audio'`
+- `attachments.type` : `'image'` | `'audio'` | `'video'`
+- Migration automatique au démarrage : si la table `attachments` existante ne contient pas `'video'` dans son CHECK, elle est recréée transparentement.
+
+### Rôles QListWidgetItem (`main_window.py`)
+
+- `UserRole + 0` = `ROLE_NOTE_ID`
+- `UserRole + 1` = `ROLE_DATE` (chaîne `"YYYY-MM-DD HH:MM"`)
+- `UserRole + 2` = `ROLE_CAT_COLOR`
+- `UserRole + 3` = `ROLE_AUDIO`
+- `UserRole + 4` = `ROLE_IMAGE`
+- `UserRole + 5` = `ROLE_VIDEO`
 
 ---
 
@@ -42,70 +53,73 @@ Tables : `notes`, `categories`, `tags`, `note_tags`, `attachments`
 - [x] Catégories hiérarchiques avec couleur (tree widget, menu contextuel)
 - [x] Tags colorés (chips dans l'éditeur, filtrage dans la liste)
 - [x] Recherche full-text (titre + contenu)
-- [x] Filtre par type : toutes / avec audio / avec images
+- [x] Filtre par type : toutes / avec audio / avec images / avec vidéos 🎬
+- [x] **Filtre par date** : aujourd'hui / 7 jours / 30 jours / cette année / période libre (QDateEdit)
 - [x] Éditeur Markdown avec barre de formatage et aperçu HTML (`QTextBrowser`)
 - [x] Auto-sauvegarde 3 s après la dernière frappe
-- [x] **Enregistrement audio** via `sounddevice` + `numpy` → fichier WAV dans `~/.local/share/Noteor/media/audio/`
+- [x] **Enregistrement audio** via `arecord` (ALSA) → fichier WAV dans `media/audio/`
+- [x] **Lecture audio** via `aplay` (ALSA)
 - [x] **Import d'images** (copie + miniature Pillow/Qt) dans `media/images/` + `media/thumbnails/`
-- [x] **Capture d'écran** (`screen.grabWindow(0)`) → image + miniature
+- [x] **Capture d'écran** via portail XDG (D-Bus, Wayland) → copie dans `media/images/` + miniature
+- [x] **Import de vidéos** (copie dans `media/video/`, durée via `ffprobe` si dispo)
 - [x] Import de dossiers de fichiers `.txt`/`.md` comme notes
-- [x] Délégué personnalisé (`NoteItemDelegate`) : affiche titre, date, icônes audio/image, bande couleur catégorie
+- [x] Délégué personnalisé (`NoteItemDelegate`) : titre, date, icônes 🎤/🖼/🎬, bande couleur catégorie
 - [x] Menu principal (Fichier, Affichage, Aide)
+- [x] README.md sur GitHub
 
 ---
 
-## Bugs connus (point d'arrêt de la dernière session)
+## Bugs corrigés lors de cette session
 
-### Bug 1 — `AttributeError` sur `sqlite3.Row` (audio recording)
+### Bug 1 — `sounddevice` bloque dans la VM ✅ résolu
+**Solution** : `audio_recorder.py` réécrit avec deux backends :
+1. **Primaire** : `arecord` / `aplay` via `subprocess.Popen` (non-bloquant, ALSA direct)
+2. **Fallback** : `sounddevice` si `arecord` absent (autres plateformes)
 
-**Contexte** : se produisait lors du flux de sauvegarde post-enregistrement.
-**Cause probable** : accès à un objet `sqlite3.Row` après fermeture/GC de la connexion qui l'a créé,
-ou accès en notation attribut (`row.field`) au lieu de subscript (`row["field"]`).
-**État** : le code actuel utilise partout `row["field"]` — à surveiller si l'erreur réapparaît.
-**À tester** : déclencher un enregistrement complet et vérifier la sortie console.
+### Bug 2 — `date_str` incorrect dans `NoteItemDelegate` ✅ résolu
+`UserRole` → `UserRole + 1` dans `ui/widgets.py`.
 
-### Bug 2 — `sounddevice` bloque dans la VM (lecture ET enregistrement)
+### Bug 3 — Capture d'écran noire sur Wayland ✅ résolu
+- `grabWindow(0)` retourne 0×0 (Wayland bloque la capture Qt)
+- **Solution** : portail XDG via D-Bus (`org.freedesktop.portal.Desktop`) exécuté dans un sous-processus Python pour éviter le conflit GLib/Qt
+- `main.py` force `QT_QPA_PLATFORM=xcb` si `WAYLAND_DISPLAY` est défini
+- Compte à rebours 3 s sur le bouton "📷 Capture" pour laisser le temps de préparer l'écran
 
-**Symptôme** : `sd.play()` et `sd.InputStream.start()` ne retournent jamais — le thread audio se bloque indéfiniment.
-**Cause** : dans cette VM, le backend PortAudio n'arrive pas à ouvrir/utiliser les périphériques audio (`pipewire`/ALSA). La commande `sd.query_devices()` fonctionne (retourne 4 devices), mais toute ouverture réelle de stream bloque.
-**Impact** : le bouton "🎤 Enregistrer" se bloque, de même que "▶ Lire".
-**Piste de résolution** : remplacer `sounddevice` par `QMediaRecorder`/`QMediaPlayer` (Qt Multimedia) ou `pyaudio` + thread avec timeout, ou utiliser `subprocess` vers `arecord`/`aplay`.
+### Bug 4 — Bouton 🗑 des images invisible ✅ résolu
+Zone pièces jointes (`attach_scroll`) passée de `100 px` à `140 px` — `ImageThumbnailWidget` fait 120 px, le bouton supprimer était rogné.
 
-### Bug 3 — `date_str` incorrect dans `NoteItemDelegate`
-
-**Fichier** : `ui/widgets.py` ligne 62
-**Code actuel** :
-```python
-date_str = index.data(Qt.ItemDataRole.UserRole) or ""   # ← récupère l'ID note, pas la date
-```
-**Correct** :
-```python
-date_str = index.data(Qt.ItemDataRole.UserRole + 1) or ""  # ROLE_DATE = UserRole + 1
-```
-Les rôles définis dans `main_window.py` :
-- `UserRole + 0` = `ROLE_NOTE_ID` (ID entier)
-- `UserRole + 1` = `ROLE_DATE` (chaîne `"YYYY-MM-DD HH:MM"`)
-- `UserRole + 2` = `ROLE_CAT_COLOR`
-- `UserRole + 3` = `ROLE_AUDIO`
-- `UserRole + 4` = `ROLE_IMAGE`
+### Bug 5 — Sélection disparaît lors d'un changement de filtre ✅ résolu
+`setCurrentItem` appelé **hors de la boucle** d'ajout d'items (+ `scrollToItem`). Appel pendant la boucle empêchait Qt de calculer correctement l'état visuel de la sélection.
 
 ---
 
-## État de la base de données
+## Environnement VM — points de vigilance
+
+| Sujet | État |
+|---|---|
+| Audio (`sounddevice`) | Non fonctionnel — PortAudio/pipewire bloque. `arecord`/`aplay` utilisés à la place. |
+| Capture d'écran Qt | `grabWindow(0)` retourne une image noire. Portail XDG utilisé à la place. |
+| `venv` | Absent — dépendances installées dans le Python système (`python3`) |
+| Commande Python | `python3` (pas `python`) |
+| `ffprobe` | Non installé — durée des vidéos affichée `--:--` si absent |
+
+---
+
+## État de la base de données (au 2026-03-20)
 
 - 1 note existante (id=1, titre="1 ere note")
-- 2 pièces jointes audio (enregistrées lors de tests précédents) :
-  - `audio_20260320_133847.wav` (5.6 s)
-  - `audio_20260320_133944.wav` (4.6 s)
+- 2 pièces jointes audio : `audio_20260320_133847.wav` (5.6 s), `audio_20260320_133944.wav` (4.6 s)
+- Table `attachments` migrée pour accepter le type `'video'`
 
 ---
 
 ## Prochaines étapes suggérées
 
-1. **Corriger le bug 3** (`date_str`) — trivial, 1 ligne
-2. **Résoudre le bug audio VM** — évaluer `QMediaPlayer`/`QMediaRecorder` comme alternative à `sounddevice`
-3. **Confirmer ou clore le bug 1** — lancer l'app et tester l'enregistrement complet
-4. Fonctionnalités futures envisageables : export PDF/HTML, transcription Whisper, sync cloud
+1. Export PDF / HTML des notes
+2. Transcription audio via Whisper (locale)
+3. Raccourcis clavier pour les pièces jointes
+4. Tri de la liste des notes (par titre, date de création, date de modification)
+5. Thème sombre
 
 ---
 
@@ -113,11 +127,17 @@ Les rôles définis dans `main_window.py` :
 
 ```bash
 # Lancer l'application
-source venv/bin/activate && python main.py
+python3 main.py
 
-# Installer les dépendances manquantes
-pip install sounddevice numpy pillow markdown PyQt6
+# Depuis un venv si disponible
+source venv/bin/activate && python3 main.py
 
-# Vérifier les devices audio
-python -c "import sounddevice as sd; print(sd.query_devices())"
+# Installer les dépendances
+pip install PyQt6 numpy pillow markdown sounddevice
+
+# Dépendances système pour audio et capture (Debian/Ubuntu)
+sudo apt install alsa-utils python3-dbus python3-gi
+
+# Vérifier les devices audio ALSA
+arecord -l
 ```
