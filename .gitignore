@@ -1,0 +1,34 @@
+# Environnement virtuel
+venv/
+.venv/
+env/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Données utilisateur (base SQLite + médias)
+*.db
+*.db-shm
+*.db-wal
+media/
+*.wav
+*.mp3
+*.png
+*.jpg
+*.jpeg
+
+# IDE / outils
+.vscode/
+.idea/
+*.swp
+*~
+
+# Claude Code
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
