@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
-from ui.widgets import TagChip, AudioPlayerWidget, ImageThumbnailWidget
+from ui.widgets import TagChip, AudioPlayerWidget, ImageThumbnailWidget, VideoPlayerWidget
 from core.audio_recorder import AudioPlayer
 
 
@@ -178,6 +178,10 @@ class EditorPanel(QWidget):
         self.import_btn.setObjectName("action_btn")
         attach_header.addWidget(self.import_btn)
 
+        self.video_btn = QPushButton("📹 Vidéo")
+        self.video_btn.setObjectName("action_btn")
+        attach_header.addWidget(self.video_btn)
+
         el.addLayout(attach_header)
 
         # Indicateur enregistrement
@@ -200,7 +204,7 @@ class EditorPanel(QWidget):
         self.attach_scroll.setObjectName("attachments_scroll")
         self.attach_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.attach_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.attach_scroll.setFixedHeight(100)
+        self.attach_scroll.setFixedHeight(140)
         self.attach_scroll.setWidgetResizable(True)
 
         self.attach_container = QWidget()
@@ -222,6 +226,7 @@ class EditorPanel(QWidget):
         self.record_btn.clicked.connect(self._toggle_recording)
         self.screenshot_btn.clicked.connect(self._take_screenshot)
         self.import_btn.clicked.connect(self._import_image)
+        self.video_btn.clicked.connect(self._import_video)
 
         self.audio_recorder.recording_started.connect(self._on_rec_started)
         self.audio_recorder.recording_stopped.connect(self._on_rec_stopped)
@@ -272,6 +277,7 @@ class EditorPanel(QWidget):
         self.record_btn.setEnabled(True)
         self.screenshot_btn.setEnabled(True)
         self.import_btn.setEnabled(True)
+        self.video_btn.setEnabled(True)
 
     def save_note(self):
         if not self.current_note_id:
@@ -324,6 +330,8 @@ class EditorPanel(QWidget):
             for att in self.db.get_attachments(self.current_note_id):
                 if att["type"] == "image":
                     w = ImageThumbnailWidget(att)
+                elif att["type"] == "video":
+                    w = VideoPlayerWidget(att)
                 else:
                     w = AudioPlayerWidget(att, self.audio_player)
                 w.delete_requested.connect(self._delete_attachment)
@@ -425,13 +433,30 @@ class EditorPanel(QWidget):
     def _take_screenshot(self):
         if not self.current_note_id:
             return
-        window = self.window()
-        window.showMinimized()
-        QTimer.singleShot(600, self._do_screenshot)
+        self.screenshot_btn.setEnabled(False)
+        self.screenshot_btn.setText("📷 3…")
+        # Compte à rebours 3 s pour que l'utilisateur prépare l'écran
+        self._screenshot_countdown = 3
+        self._screenshot_timer = QTimer()
+        self._screenshot_timer.setInterval(1000)
+        self._screenshot_timer.timeout.connect(self._screenshot_tick)
+        self._screenshot_timer.start()
+
+    def _screenshot_tick(self):
+        self._screenshot_countdown -= 1
+        if self._screenshot_countdown > 0:
+            self.screenshot_btn.setText(f"📷 {self._screenshot_countdown}…")
+        else:
+            self._screenshot_timer.stop()
+            self.screenshot_btn.setText("📷 Capture…")
+            self.window().showMinimized()
+            QTimer.singleShot(400, self._do_screenshot)
 
     def _do_screenshot(self):
         result = self.file_manager.take_screenshot()
         self.window().showNormal()
+        self.screenshot_btn.setText("📷 Capture")
+        self.screenshot_btn.setEnabled(True)
         if result and self.current_note_id:
             filepath, thumb = result
             self.db.add_attachment(
@@ -440,6 +465,10 @@ class EditorPanel(QWidget):
             )
             self._refresh_attachments()
             self.note_changed.emit(self.current_note_id, self.title_input.text())
+        elif not result:
+            QMessageBox.warning(self, "Capture échouée",
+                                "Impossible de capturer l'écran.\n"
+                                "Relancez l'application pour appliquer le correctif Wayland.")
 
     def _import_image(self):
         if not self.current_note_id:
@@ -453,6 +482,22 @@ class EditorPanel(QWidget):
             self.db.add_attachment(
                 self.current_note_id, "image",
                 Path(filepath).name, filepath, thumbnail_path=thumb
+            )
+            self._refresh_attachments()
+            self.note_changed.emit(self.current_note_id, self.title_input.text())
+
+    def _import_video(self):
+        if not self.current_note_id:
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Importer une vidéo", str(Path.home()),
+            "Vidéos (*.mp4 *.mkv *.avi *.mov *.wmv *.flv *.webm *.m4v *.ogv)"
+        )
+        if path:
+            filepath, duration = self.file_manager.import_video(path)
+            self.db.add_attachment(
+                self.current_note_id, "video",
+                Path(filepath).name, filepath, duration=duration
             )
             self._refresh_attachments()
             self.note_changed.emit(self.current_note_id, self.title_input.text())

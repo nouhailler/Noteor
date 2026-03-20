@@ -2,14 +2,16 @@
 
 from pathlib import Path
 
+from datetime import date, timedelta
+
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QSplitter, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QTreeWidget, QTreeWidgetItem,
     QListWidget, QListWidgetItem, QComboBox, QStatusBar,
     QMenu, QMessageBox, QInputDialog, QFileDialog, QColorDialog,
-    QAbstractItemView,
+    QAbstractItemView, QDateEdit,
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QDate, pyqtSignal
 from PyQt6.QtGui import QAction, QColor, QIcon, QKeySequence
 
 import config
@@ -26,6 +28,7 @@ ROLE_DATE      = Qt.ItemDataRole.UserRole + 1
 ROLE_CAT_COLOR = Qt.ItemDataRole.UserRole + 2
 ROLE_AUDIO     = Qt.ItemDataRole.UserRole + 3
 ROLE_IMAGE     = Qt.ItemDataRole.UserRole + 4
+ROLE_VIDEO     = Qt.ItemDataRole.UserRole + 5
 
 
 class MainWindow(QMainWindow):
@@ -41,8 +44,10 @@ class MainWindow(QMainWindow):
         self._current_category_id = None   # None = toutes les notes
         self._current_tag_id      = None
         self._show_deleted        = False
-        self._type_filter         = None   # 'image' | 'audio' | None
+        self._type_filter         = None   # 'image' | 'audio' | 'video' | None
         self._search_text         = ""
+        self._date_from           = None   # str "YYYY-MM-DD" ou None
+        self._date_to             = None   # str "YYYY-MM-DD" ou None
 
         self._building_tree   = False
         self._building_notes  = False
@@ -137,9 +142,48 @@ class MainWindow(QMainWindow):
 
         self.type_combo = QComboBox()
         self.type_combo.setObjectName("filter_combo")
-        self.type_combo.addItems(["Toutes les notes", "Avec audio 🎤", "Avec images 🖼"])
+        self.type_combo.addItems(["Toutes les notes", "Avec audio 🎤", "Avec images 🖼", "Avec vidéos 🎬"])
         self.type_combo.currentIndexChanged.connect(self._on_type_filter_changed)
         layout.addWidget(self.type_combo)
+
+        # Filtre date
+        date_lbl = QLabel("FILTRER PAR DATE")
+        date_lbl.setObjectName("section_header")
+        layout.addWidget(date_lbl)
+
+        self.date_combo = QComboBox()
+        self.date_combo.setObjectName("filter_combo")
+        self.date_combo.addItems([
+            "Toutes les dates",
+            "Aujourd'hui",
+            "7 derniers jours",
+            "30 derniers jours",
+            "Cette année",
+            "Période…",
+        ])
+        self.date_combo.currentIndexChanged.connect(self._on_date_preset_changed)
+        layout.addWidget(self.date_combo)
+
+        # Sélecteurs de période personnalisée (masqués par défaut)
+        self.date_range_widget = QWidget()
+        dr = QHBoxLayout(self.date_range_widget)
+        dr.setContentsMargins(0, 2, 0, 2)
+        dr.setSpacing(4)
+        self.date_from_edit = QDateEdit()
+        self.date_from_edit.setCalendarPopup(True)
+        self.date_from_edit.setDisplayFormat("dd/MM/yyyy")
+        self.date_from_edit.setDate(QDate.currentDate().addMonths(-1))
+        self.date_from_edit.dateChanged.connect(self._on_date_range_changed)
+        dr.addWidget(self.date_from_edit)
+        dr.addWidget(QLabel("→"))
+        self.date_to_edit = QDateEdit()
+        self.date_to_edit.setCalendarPopup(True)
+        self.date_to_edit.setDisplayFormat("dd/MM/yyyy")
+        self.date_to_edit.setDate(QDate.currentDate())
+        self.date_to_edit.dateChanged.connect(self._on_date_range_changed)
+        dr.addWidget(self.date_to_edit)
+        self.date_range_widget.setVisible(False)
+        layout.addWidget(self.date_range_widget)
 
         # Corbeille
         self.trash_btn = QPushButton("🗑  Corbeille")
@@ -257,8 +301,11 @@ class MainWindow(QMainWindow):
             tag_id=self._current_tag_id,
             search=self._search_text or None,
             type_filter=self._type_filter,
+            date_from=self._date_from,
+            date_to=self._date_to,
         )
 
+        item_to_select = None
         for note in notes:
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.DisplayRole, note["title"])
@@ -267,9 +314,15 @@ class MainWindow(QMainWindow):
             item.setData(ROLE_CAT_COLOR, note["category_color"])
             item.setData(ROLE_AUDIO,     bool(note["audio_count"]))
             item.setData(ROLE_IMAGE,     bool(note["image_count"]))
+            item.setData(ROLE_VIDEO,     bool(note["video_count"]))
             self.notes_list.addItem(item)
             if note["id"] == prev_id:
-                self.notes_list.setCurrentItem(item)
+                item_to_select = item
+
+        # Restaurer la sélection une fois la liste entièrement construite
+        if item_to_select is not None:
+            self.notes_list.setCurrentItem(item_to_select)
+            self.notes_list.scrollToItem(item_to_select)
 
         count = self.notes_list.count()
         noun  = "note" if count <= 1 else "notes"
@@ -311,7 +364,29 @@ class MainWindow(QMainWindow):
         self._refresh_notes_list()
 
     def _on_type_filter_changed(self, index: int):
-        self._type_filter = [None, "audio", "image"][index]
+        self._type_filter = [None, "audio", "image", "video"][index]
+        self._refresh_notes_list()
+
+    def _on_date_preset_changed(self, index: int):
+        today = date.today()
+        presets = {
+            0: (None, None),                                          # Toutes les dates
+            1: (today.isoformat(), today.isoformat()),               # Aujourd'hui
+            2: ((today - timedelta(days=6)).isoformat(), today.isoformat()),  # 7 jours
+            3: ((today - timedelta(days=29)).isoformat(), today.isoformat()), # 30 jours
+            4: (date(today.year, 1, 1).isoformat(), today.isoformat()),       # Cette année
+        }
+        is_custom = (index == 5)
+        self.date_range_widget.setVisible(is_custom)
+        if is_custom:
+            self._on_date_range_changed()
+        else:
+            self._date_from, self._date_to = presets.get(index, (None, None))
+            self._refresh_notes_list()
+
+    def _on_date_range_changed(self):
+        self._date_from = self.date_from_edit.date().toString("yyyy-MM-dd")
+        self._date_to   = self.date_to_edit.date().toString("yyyy-MM-dd")
         self._refresh_notes_list()
 
     def _on_note_clicked(self, item: QListWidgetItem):
@@ -336,6 +411,7 @@ class MainWindow(QMainWindow):
                     if n["id"] == note_id:
                         item.setData(ROLE_AUDIO, bool(n["audio_count"]))
                         item.setData(ROLE_IMAGE, bool(n["image_count"]))
+                        item.setData(ROLE_VIDEO, bool(n["video_count"]))
                         break
                 self.notes_list.viewport().update()
                 break
@@ -491,9 +567,12 @@ class MainWindow(QMainWindow):
         self._current_category_id = None
         self._current_tag_id      = None
         self._show_deleted        = False
+        self._date_from           = None
+        self._date_to             = None
         self.trash_btn.setChecked(False)
         self.search_bar.clear()
         self.type_combo.setCurrentIndex(0)
+        self.date_combo.setCurrentIndex(0)
         self._refresh_notes_list()
         self.cat_tree.clearSelection()
 

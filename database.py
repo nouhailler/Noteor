@@ -7,6 +7,7 @@ class Database:
     def __init__(self):
         self.db_path = config.DB_PATH
         self._create_schema()
+        self._migrate_schema()
 
     def get_connection(self):
         conn = sqlite3.connect(str(self.db_path))
@@ -52,7 +53,7 @@ class Database:
                 CREATE TABLE IF NOT EXISTS attachments (
                     id              INTEGER PRIMARY KEY AUTOINCREMENT,
                     note_id         INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
-                    type            TEXT NOT NULL CHECK(type IN ('image','audio')),
+                    type            TEXT NOT NULL CHECK(type IN ('image','audio','video')),
                     filename        TEXT NOT NULL,
                     filepath        TEXT NOT NULL,
                     thumbnail_path  TEXT,
@@ -65,6 +66,32 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_notes_deleted  ON notes(is_deleted);
                 CREATE INDEX IF NOT EXISTS idx_attach_note    ON attachments(note_id);
             """)
+
+    def _migrate_schema(self):
+        """Recrée la table attachments si elle n'accepte pas encore le type 'video'."""
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='attachments'"
+            ).fetchone()
+            if row and "'video'" not in row["sql"]:
+                conn.executescript("""
+                    PRAGMA foreign_keys = OFF;
+                    ALTER TABLE attachments RENAME TO attachments_old;
+                    CREATE TABLE attachments (
+                        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        note_id         INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+                        type            TEXT NOT NULL CHECK(type IN ('image','audio','video')),
+                        filename        TEXT NOT NULL,
+                        filepath        TEXT NOT NULL,
+                        thumbnail_path  TEXT,
+                        duration        REAL,
+                        transcription   TEXT,
+                        created_at      TEXT DEFAULT (datetime('now','localtime'))
+                    );
+                    INSERT INTO attachments SELECT * FROM attachments_old;
+                    DROP TABLE attachments_old;
+                    PRAGMA foreign_keys = ON;
+                """)
 
     # ──────────────────────────── Notes ────────────────────────────
 
@@ -120,12 +147,15 @@ class Database:
         tag_id=None,
         search=None,
         type_filter=None,
+        date_from=None,
+        date_to=None,
     ):
         query = """
             SELECT DISTINCT n.*,
                 c.color AS category_color,
                 (SELECT COUNT(*) FROM attachments a WHERE a.note_id=n.id AND a.type='image') AS image_count,
-                (SELECT COUNT(*) FROM attachments a WHERE a.note_id=n.id AND a.type='audio') AS audio_count
+                (SELECT COUNT(*) FROM attachments a WHERE a.note_id=n.id AND a.type='audio') AS audio_count,
+                (SELECT COUNT(*) FROM attachments a WHERE a.note_id=n.id AND a.type='video') AS video_count
             FROM notes n
             LEFT JOIN categories c ON c.id = n.category_id
         """
@@ -153,6 +183,18 @@ class Database:
             conditions.append(
                 "(SELECT COUNT(*) FROM attachments a WHERE a.note_id=n.id AND a.type='audio') > 0"
             )
+        elif type_filter == "video":
+            conditions.append(
+                "(SELECT COUNT(*) FROM attachments a WHERE a.note_id=n.id AND a.type='video') > 0"
+            )
+
+        if date_from:
+            conditions.append("n.updated_at >= ?")
+            params.append(date_from)
+        if date_to:
+            # date_to est inclus : on compare jusqu'à la fin du jour
+            conditions.append("n.updated_at < date(?, '+1 day')")
+            params.append(date_to)
 
         query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY n.updated_at DESC"

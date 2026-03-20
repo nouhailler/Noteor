@@ -2,10 +2,16 @@
 """Point d'entrée de l'application Noteor."""
 
 import sys
+import os
 from pathlib import Path
 
 # Ajoute le répertoire courant au path
 sys.path.insert(0, str(Path(__file__).parent))
+
+# Sur Wayland, grabWindow(0) retourne une image vide (restriction sécurité).
+# On bascule sur XWayland (xcb) pour que la capture d'écran fonctionne.
+if os.environ.get("WAYLAND_DISPLAY") and "QT_QPA_PLATFORM" not in os.environ:
+    os.environ["QT_QPA_PLATFORM"] = "xcb"
 
 import config
 
@@ -17,6 +23,7 @@ def main():
         config.AUDIO_DIR,
         config.IMAGE_DIR,
         config.THUMB_DIR,
+        config.VIDEO_DIR,
     ):
         directory.mkdir(parents=True, exist_ok=True)
 

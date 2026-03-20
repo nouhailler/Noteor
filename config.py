@@ -10,6 +10,7 @@ MEDIA_DIR = DATA_DIR / "media"
 AUDIO_DIR = MEDIA_DIR / "audio"
 IMAGE_DIR = MEDIA_DIR / "images"
 THUMB_DIR = MEDIA_DIR / "thumbnails"
+VIDEO_DIR = MEDIA_DIR / "video"
 
 # Images
 THUMBNAIL_SIZE = (220, 160)

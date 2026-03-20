@@ -59,10 +59,11 @@ class NoteItemDelegate(QStyledItemDelegate):
         painter.setFont(meta_font)
         painter.setPen(QColor("#9CA3AF"))
 
-        date_str  = index.data(Qt.ItemDataRole.UserRole)     or ""
+        date_str  = index.data(Qt.ItemDataRole.UserRole + 1)  or ""
         has_audio = index.data(Qt.ItemDataRole.UserRole + 3)
         has_image = index.data(Qt.ItemDataRole.UserRole + 4)
-        icons     = ("🎤 " if has_audio else "") + ("🖼 " if has_image else "")
+        has_video = index.data(Qt.ItemDataRole.UserRole + 5)
+        icons     = ("🎤 " if has_audio else "") + ("🖼 " if has_image else "") + ("🎬 " if has_video else "")
         meta_rect = QRect(tx, ty + 32, tw, 16)
         painter.drawText(meta_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                          f"{date_str}  {icons}")
@@ -265,3 +266,74 @@ class AudioPlayerWidget(QFrame):
     def _on_stopped(self):
         self.play_btn.setChecked(False)
         self.play_btn.setText("▶ Lire")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Lecteur vidéo
+# ─────────────────────────────────────────────────────────────────────────────
+
+class VideoPlayerWidget(QFrame):
+    """Widget compact pour afficher et ouvrir une pièce jointe vidéo."""
+
+    delete_requested = pyqtSignal(int)   # attachment_id
+
+    def __init__(self, attachment, parent=None):
+        super().__init__(parent)
+        self.att_id   = attachment["id"]
+        self.filepath = attachment["filepath"]
+        self.setObjectName("attach_widget")
+        self.setFixedSize(160, 80)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 6)
+        layout.setSpacing(4)
+
+        # Icône + durée
+        dur = attachment["duration"] or 0
+        mins, secs = divmod(int(dur), 60)
+        dur_str = f"{mins:02d}:{secs:02d}" if dur else "--:--"
+
+        top_row = QHBoxLayout()
+        top_row.setContentsMargins(0, 0, 0, 0)
+        icon_lbl = QLabel("🎬")
+        icon_lbl.setStyleSheet("font-size:20px;")
+        top_row.addWidget(icon_lbl)
+        top_row.addStretch()
+        dur_lbl = QLabel(dur_str)
+        dur_lbl.setStyleSheet("color:#7C3AED; font-weight:bold; font-size:12px;")
+        top_row.addWidget(dur_lbl)
+        layout.addLayout(top_row)
+
+        # Nom du fichier
+        filename = Path(self.filepath).name
+        name_lbl = QLabel(filename[:20] + "…" if len(filename) > 20 else filename)
+        name_lbl.setStyleSheet("font-size:9px; color:#6B7280;")
+        name_lbl.setToolTip(filename)
+        layout.addWidget(name_lbl)
+
+        # Boutons ouvrir / supprimer
+        btn_row = QHBoxLayout()
+        btn_row.setContentsMargins(0, 0, 0, 0)
+
+        open_btn = QPushButton("▶ Ouvrir")
+        open_btn.setObjectName("attach_play_btn")
+        open_btn.setFixedHeight(22)
+        open_btn.clicked.connect(self._open_video)
+        btn_row.addWidget(open_btn, 1)
+
+        del_btn = QPushButton("🗑")
+        del_btn.setObjectName("attach_del_btn")
+        del_btn.setFixedSize(22, 22)
+        del_btn.setToolTip("Supprimer")
+        del_btn.clicked.connect(lambda: self.delete_requested.emit(self.att_id))
+        btn_row.addWidget(del_btn)
+        layout.addLayout(btn_row)
+
+    def _open_video(self):
+        """Ouvre la vidéo dans le lecteur système."""
+        import subprocess, shutil
+        for player in ("mpv", "vlc", "totem", "xdg-open"):
+            if shutil.which(player):
+                subprocess.Popen([player, self.filepath])
+                return
+        subprocess.Popen(["xdg-open", self.filepath])

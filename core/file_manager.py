@@ -31,19 +31,84 @@ class FileManager:
         return str(dest), thumb_path
 
     def take_screenshot(self) -> tuple[str, str] | None:
-        """Capture l'écran principal. Retourne (filepath, thumbnail_path) ou None."""
-        screen = QApplication.primaryScreen()
-        if not screen:
-            return None
-
-        pixmap    = screen.grabWindow(0)
+        """Capture l'écran via le portail XDG (Wayland) ou Qt (X11).
+        Retourne (filepath, thumbnail_path) ou None."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename  = f"screenshot_{timestamp}.png"
         filepath  = config.IMAGE_DIR / filename
 
-        pixmap.save(str(filepath), "PNG")
-        thumb_path = self._create_thumbnail(filepath)
-        return str(filepath), thumb_path
+        # ── Portail XDG (fonctionne sur Wayland et X11) ──────────────────
+        result = self._screenshot_via_portal(filepath)
+        if result:
+            return result
+
+        # ── Fallback : Qt grabWindow (X11 uniquement) ─────────────────────
+        try:
+            screen = QApplication.primaryScreen()
+            if screen:
+                pixmap = screen.grabWindow(0)
+                if not pixmap.isNull() and pixmap.width() > 0:
+                    pixmap.save(str(filepath), "PNG")
+                    thumb_path = self._create_thumbnail(filepath)
+                    return str(filepath), thumb_path
+        except Exception:
+            pass
+
+        return None
+
+    def _screenshot_via_portal(self, dest: Path) -> tuple[str, str] | None:
+        """Utilise le portail XDG via D-Bus pour capturer l'écran."""
+        import subprocess, sys, json
+        from urllib.parse import urlparse
+
+        # Script exécuté dans un sous-processus pour éviter le conflit
+        # entre la boucle GLib et la boucle Qt.
+        script = r"""
+import sys, json
+import dbus, dbus.mainloop.glib
+from gi.repository import GLib
+import threading
+
+dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+bus = dbus.SessionBus()
+loop = GLib.MainLoop()
+result = {}
+
+def on_response(response, results):
+    result['response'] = int(response)
+    if int(response) == 0:
+        result['uri'] = str(results.get('uri', ''))
+    loop.quit()
+
+obj = bus.get_object('org.freedesktop.portal.Desktop', '/org/freedesktop/portal/desktop')
+iface = dbus.Interface(obj, 'org.freedesktop.portal.Screenshot')
+req_path = iface.Screenshot('', {
+    'interactive': dbus.Boolean(False),
+    'handle_token': dbus.String('noteor_cap'),
+})
+req_obj = bus.get_object('org.freedesktop.portal.Desktop', req_path)
+req_obj.connect_to_signal('Response', on_response)
+
+threading.Timer(10, loop.quit).start()
+loop.run()
+print(json.dumps(result))
+"""
+        try:
+            r = subprocess.run(
+                [sys.executable, "-c", script],
+                capture_output=True, text=True, timeout=12,
+            )
+            data = json.loads(r.stdout.strip())
+            if data.get("response") == 0 and data.get("uri"):
+                source = Path(urlparse(data["uri"]).path)
+                if source.exists():
+                    shutil.copy2(source, dest)
+                    thumb_path = self._create_thumbnail(dest)
+                    return str(dest), thumb_path
+        except Exception:
+            pass
+
+        return None
 
     def _create_thumbnail(self, image_path: Path) -> str:
         """Crée une miniature avec Pillow ou via Qt si Pillow absent."""
@@ -79,6 +144,40 @@ class FileManager:
             pass
 
         return str(image_path)
+
+    # ──────────────── Vidéos ─────────────────────────────────────────
+
+    def import_video(self, source_path: str) -> tuple[str, float]:
+        """Copie la vidéo dans le dossier media/video.
+        Retourne (filepath, duration_seconds)."""
+        source    = Path(source_path)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename  = f"vid_{timestamp}{source.suffix.lower()}"
+        dest      = config.VIDEO_DIR / filename
+
+        shutil.copy2(source, dest)
+        duration = self._get_video_duration(dest)
+        return str(dest), duration
+
+    def _get_video_duration(self, video_path: Path) -> float:
+        """Retourne la durée en secondes via ffprobe, ou 0.0 si indisponible."""
+        if not shutil.which("ffprobe"):
+            return 0.0
+        try:
+            import subprocess, json
+            result = subprocess.run(
+                [
+                    "ffprobe", "-v", "quiet",
+                    "-print_format", "json",
+                    "-show_format",
+                    str(video_path),
+                ],
+                capture_output=True, text=True, timeout=10
+            )
+            data = json.loads(result.stdout)
+            return float(data.get("format", {}).get("duration", 0))
+        except Exception:
+            return 0.0
 
     # ──────────────── Fichiers texte / Markdown ───────────────────────
 
