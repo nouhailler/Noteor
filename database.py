@@ -19,6 +19,13 @@ class Database:
     def _create_schema(self):
         with self.get_connection() as conn:
             conn.executescript("""
+                CREATE TABLE IF NOT EXISTS folders (
+                    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name      TEXT NOT NULL,
+                    parent_id INTEGER REFERENCES folders(id) ON DELETE CASCADE,
+                    created_at TEXT DEFAULT (datetime('now','localtime'))
+                );
+
                 CREATE TABLE IF NOT EXISTS categories (
                     id    INTEGER PRIMARY KEY AUTOINCREMENT,
                     name  TEXT NOT NULL,
@@ -32,6 +39,7 @@ class Database:
                     title       TEXT NOT NULL DEFAULT 'Sans titre',
                     content     TEXT DEFAULT '',
                     category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+                    folder_id   INTEGER REFERENCES folders(id)    ON DELETE SET NULL,
                     created_at  TEXT DEFAULT (datetime('now','localtime')),
                     updated_at  TEXT DEFAULT (datetime('now','localtime')),
                     is_deleted  INTEGER DEFAULT 0,
@@ -68,7 +76,20 @@ class Database:
             """)
 
     def _migrate_schema(self):
-        """Recrée la table attachments si elle n'accepte pas encore le type 'video'."""
+        """Migrations incrémentales au démarrage."""
+        with self.get_connection() as conn:
+            # Ajout de folder_id sur notes (si absent)
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(notes)").fetchall()]
+            if "folder_id" not in cols:
+                conn.execute(
+                    "ALTER TABLE notes ADD COLUMN folder_id INTEGER "
+                    "REFERENCES folders(id) ON DELETE SET NULL"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder_id)"
+                )
+
+        # Recrée la table attachments si elle n'accepte pas encore le type 'video'
         with self.get_connection() as conn:
             row = conn.execute(
                 "SELECT sql FROM sqlite_master WHERE type='table' AND name='attachments'"
@@ -95,11 +116,11 @@ class Database:
 
     # ──────────────────────────── Notes ────────────────────────────
 
-    def create_note(self, title="Sans titre", content="", category_id=None):
+    def create_note(self, title="Sans titre", content="", category_id=None, folder_id=None):
         with self.get_connection() as conn:
             cur = conn.execute(
-                "INSERT INTO notes (title, content, category_id) VALUES (?,?,?)",
-                (title, content, category_id),
+                "INSERT INTO notes (title, content, category_id, folder_id) VALUES (?,?,?,?)",
+                (title, content, category_id, folder_id),
             )
             return cur.lastrowid
 
@@ -109,7 +130,7 @@ class Database:
                 "SELECT * FROM notes WHERE id = ?", (note_id,)
             ).fetchone()
 
-    def update_note(self, note_id, title=None, content=None, category_id=None):
+    def update_note(self, note_id, title=None, content=None, category_id=None, folder_id=...):
         fields, values = ["updated_at = datetime('now','localtime')"], []
         if title is not None:
             fields.append("title = ?"); values.append(title)
@@ -117,6 +138,8 @@ class Database:
             fields.append("content = ?"); values.append(content)
         if category_id is not None:
             fields.append("category_id = ?"); values.append(category_id)
+        if folder_id is not ...:       # None = retirer du dossier ; sentinel ... = ne pas toucher
+            fields.append("folder_id = ?"); values.append(folder_id)
         values.append(note_id)
         with self.get_connection() as conn:
             conn.execute(f"UPDATE notes SET {', '.join(fields)} WHERE id = ?", values)
@@ -143,6 +166,7 @@ class Database:
     def get_notes(
         self,
         category_id=None,
+        folder_id=None,
         deleted=False,
         tag_id=None,
         search=None,
@@ -170,6 +194,10 @@ class Database:
         if category_id is not None:
             conditions.append("n.category_id = ?")
             params.append(category_id)
+
+        if folder_id is not None:
+            conditions.append("n.folder_id = ?")
+            params.append(folder_id)
 
         if search:
             conditions.append("(n.title LIKE ? OR n.content LIKE ?)")
@@ -201,6 +229,43 @@ class Database:
 
         with self.get_connection() as conn:
             return conn.execute(query, params).fetchall()
+
+    # ──────────────────────────── Folders ────────────────────────────
+
+    def create_folder(self, name: str, parent_id=None) -> int:
+        with self.get_connection() as conn:
+            cur = conn.execute(
+                "INSERT INTO folders (name, parent_id) VALUES (?,?)", (name, parent_id)
+            )
+            return cur.lastrowid
+
+    def rename_folder(self, folder_id: int, name: str):
+        with self.get_connection() as conn:
+            conn.execute("UPDATE folders SET name=? WHERE id=?", (name, folder_id))
+
+    def delete_folder(self, folder_id: int):
+        """Supprime le dossier (et ses sous-dossiers via CASCADE).
+        Les notes du dossier voient leur folder_id mis à NULL via ON DELETE SET NULL."""
+        with self.get_connection() as conn:
+            conn.execute("DELETE FROM folders WHERE id=?", (folder_id,))
+
+    def get_all_folders(self):
+        """Retourne tous les dossiers avec le nombre de notes directes."""
+        with self.get_connection() as conn:
+            return conn.execute("""
+                SELECT f.*,
+                    (SELECT COUNT(*) FROM notes n
+                     WHERE n.folder_id = f.id AND n.is_deleted = 0) AS note_count
+                FROM folders f
+                ORDER BY f.parent_id NULLS FIRST, f.name COLLATE NOCASE
+            """).fetchall()
+
+    def move_note_to_folder(self, note_id: int, folder_id):
+        """Déplace une note dans un dossier. folder_id=None retire la note de tout dossier."""
+        with self.get_connection() as conn:
+            conn.execute(
+                "UPDATE notes SET folder_id=? WHERE id=?", (folder_id, note_id)
+            )
 
     # ──────────────────────────── Categories ─────────────────────────
 

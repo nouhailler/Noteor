@@ -36,6 +36,9 @@ def main():
     app.setOrganizationName("Noteor")
     app.setStyle("Fusion")
 
+    # Seuil de déclenchement du drag réduit pour les touchpads
+    app.setStartDragDistance(4)
+
     from ui.styles import STYLESHEET
     app.setStyleSheet(STYLESHEET)
 

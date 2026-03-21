@@ -20,6 +20,7 @@ Noteor/
 ├── database.py               # Toute la couche SQLite (Database class)
 ├── core/
 │   ├── audio_recorder.py     # AudioRecorder + AudioPlayer (arecord/aplay + sounddevice fallback)
+│   ├── webcam_recorder.py    # WebcamRecorder (ffmpeg + v4l2, SIGINT pour arrêt propre)
 │   └── file_manager.py       # Copie/miniatures images, import texte/vidéo, screenshots
 └── ui/
     ├── main_window.py        # Fenêtre principale (3 panneaux via QSplitter)
@@ -62,6 +63,7 @@ Tables : `notes`, `categories`, `tags`, `note_tags`, `attachments`
 - [x] **Import d'images** (copie + miniature Pillow/Qt) dans `media/images/` + `media/thumbnails/`
 - [x] **Capture d'écran** via portail XDG (D-Bus, Wayland) → copie dans `media/images/` + miniature
 - [x] **Import de vidéos** (copie dans `media/video/`, durée via `ffprobe` si dispo)
+- [x] **Enregistrement webcam** via `ffmpeg` + v4l2 → fichier MP4 dans `media/video/` (bouton 🎥 Webcam, indicateur temps écoulé)
 - [x] Import de dossiers de fichiers `.txt`/`.md` comme notes
 - [x] Délégué personnalisé (`NoteItemDelegate`) : titre, date, icônes 🎤/🖼/🎬, bande couleur catégorie
 - [x] Menu principal (Fichier, Affichage, Aide)
@@ -102,6 +104,8 @@ Zone pièces jointes (`attach_scroll`) passée de `100 px` à `140 px` — `Imag
 | `venv` | Absent — dépendances installées dans le Python système (`python3`) |
 | Commande Python | `python3` (pas `python`) |
 | `ffprobe` | Non installé — durée des vidéos affichée `--:--` si absent |
+| `ffmpeg` | Non installé — **requis pour l'enregistrement webcam**. `sudo apt install ffmpeg` |
+| Webcam | `/dev/video0` et `/dev/video1` détectés dans la VM |
 
 ---
 
@@ -110,6 +114,25 @@ Zone pièces jointes (`attach_scroll`) passée de `100 px` à `140 px` — `Imag
 - 1 note existante (id=1, titre="1 ere note")
 - 2 pièces jointes audio : `audio_20260320_133847.wav` (5.6 s), `audio_20260320_133944.wav` (4.6 s)
 - Table `attachments` migrée pour accepter le type `'video'`
+
+---
+
+## Session du 2026-03-21
+
+### Enregistrement webcam ✅ implémenté
+
+- Nouveau fichier `core/webcam_recorder.py` : classe `WebcamRecorder` (QObject + signaux PyQt6)
+  - Backend : `ffmpeg -f v4l2` — SIGINT pour arrêt propre (finalise le MP4)
+  - Détection automatique du device (`/dev/video*`)
+  - Double tentative : d'abord `-input_format mjpeg`, fallback sans format forcé
+  - Délai de 800 ms pour détecter les crashs au démarrage avant d'émettre `recording_started`
+- `ui/editor.py` :
+  - Bouton "🎥 Webcam" (checkable, style `record_btn`)
+  - Indicateur "🔴 Enregistrement webcam…" + compteur temps écoulé MM:SS
+  - 4 méthodes : `_toggle_webcam_recording`, `_on_webcam_started`, `_on_webcam_stopped`, `_on_webcam_error`
+  - La vidéo enregistrée est sauvée comme pièce jointe `type='video'` (même chemin que les vidéos importées)
+- `ui/main_window.py` : instanciation de `WebcamRecorder`, passé à `EditorPanel`
+- **Dépendance requise** : `sudo apt install ffmpeg` (non présent dans la VM au moment du dev)
 
 ---
 

@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from ui.widgets import TagChip, AudioPlayerWidget, ImageThumbnailWidget, VideoPlayerWidget
 from core.audio_recorder import AudioPlayer
+from core.webcam_recorder import WebcamRecorder
 
 
 class EditorPanel(QWidget):
@@ -19,12 +20,13 @@ class EditorPanel(QWidget):
     # Émis quand la note change (pour mettre à jour la liste centrale)
     note_changed = pyqtSignal(int, str)    # note_id, new_title
 
-    def __init__(self, db, file_manager, audio_recorder, parent=None):
+    def __init__(self, db, file_manager, audio_recorder, webcam_recorder=None, parent=None):
         super().__init__(parent)
-        self.db             = db
-        self.file_manager   = file_manager
-        self.audio_recorder = audio_recorder
-        self.audio_player   = AudioPlayer()
+        self.db              = db
+        self.file_manager    = file_manager
+        self.audio_recorder  = audio_recorder
+        self.webcam_recorder = webcam_recorder or WebcamRecorder()
+        self.audio_player    = AudioPlayer()
 
         self.current_note_id = None
         self._is_modified    = False
@@ -182,9 +184,14 @@ class EditorPanel(QWidget):
         self.video_btn.setObjectName("action_btn")
         attach_header.addWidget(self.video_btn)
 
+        self.webcam_btn = QPushButton("🎥 Webcam")
+        self.webcam_btn.setObjectName("record_btn")
+        self.webcam_btn.setCheckable(True)
+        attach_header.addWidget(self.webcam_btn)
+
         el.addLayout(attach_header)
 
-        # Indicateur enregistrement
+        # Indicateur enregistrement audio
         self.rec_indicator = QWidget()
         ri = QHBoxLayout(self.rec_indicator)
         ri.setContentsMargins(0, 0, 0, 0)
@@ -198,6 +205,26 @@ class EditorPanel(QWidget):
         ri.addWidget(self.level_bar, 1)
         self.rec_indicator.setVisible(False)
         el.addWidget(self.rec_indicator)
+
+        # Indicateur enregistrement webcam
+        self.webcam_indicator = QWidget()
+        wi = QHBoxLayout(self.webcam_indicator)
+        wi.setContentsMargins(0, 0, 0, 0)
+        wi.setSpacing(8)
+        self._webcam_dot_label = QLabel("🔴 Enregistrement webcam…")
+        wi.addWidget(self._webcam_dot_label)
+        self._webcam_elapsed_label = QLabel("00:00")
+        self._webcam_elapsed_label.setStyleSheet("color:#EF4444; font-weight:bold;")
+        wi.addWidget(self._webcam_elapsed_label)
+        wi.addStretch()
+        self.webcam_indicator.setVisible(False)
+        el.addWidget(self.webcam_indicator)
+
+        # Timer pour afficher la durée d'enregistrement webcam
+        self._webcam_elapsed_timer = QTimer()
+        self._webcam_elapsed_timer.setInterval(1000)
+        self._webcam_elapsed_timer.timeout.connect(self._update_webcam_elapsed)
+        self._webcam_start_time = 0
 
         # Zone de défilement des pièces jointes
         self.attach_scroll = QScrollArea()
@@ -227,6 +254,7 @@ class EditorPanel(QWidget):
         self.screenshot_btn.clicked.connect(self._take_screenshot)
         self.import_btn.clicked.connect(self._import_image)
         self.video_btn.clicked.connect(self._import_video)
+        self.webcam_btn.clicked.connect(self._toggle_webcam_recording)
 
         self.audio_recorder.recording_started.connect(self._on_rec_started)
         self.audio_recorder.recording_stopped.connect(self._on_rec_stopped)
@@ -234,6 +262,10 @@ class EditorPanel(QWidget):
         self.audio_recorder.level_updated.connect(
             lambda v: self.level_bar.setValue(int(v * 100))
         )
+
+        self.webcam_recorder.recording_started.connect(self._on_webcam_started)
+        self.webcam_recorder.recording_stopped.connect(self._on_webcam_stopped)
+        self.webcam_recorder.recording_error.connect(self._on_webcam_error)
 
     # ──────────────────────────── API publique ─────────────────────────
 
@@ -278,6 +310,7 @@ class EditorPanel(QWidget):
         self.screenshot_btn.setEnabled(True)
         self.import_btn.setEnabled(True)
         self.video_btn.setEnabled(True)
+        self.webcam_btn.setEnabled(True)
 
     def save_note(self):
         if not self.current_note_id:
@@ -501,6 +534,51 @@ class EditorPanel(QWidget):
             )
             self._refresh_attachments()
             self.note_changed.emit(self.current_note_id, self.title_input.text())
+
+    def _toggle_webcam_recording(self, checked: bool):
+        if not self.current_note_id:
+            self.webcam_btn.setChecked(False)
+            QMessageBox.information(self, "Noteor", "Veuillez d'abord créer ou sélectionner une note.")
+            return
+        if checked:
+            self.webcam_recorder.start()
+        else:
+            self.webcam_recorder.stop()
+
+    def _on_webcam_started(self):
+        import time as _time
+        self._webcam_start_time = _time.monotonic()
+        self.webcam_indicator.setVisible(True)
+        self.webcam_btn.setText("⏹ Arrêter")
+        self._webcam_elapsed_label.setText("00:00")
+        self._webcam_elapsed_timer.start()
+
+    def _on_webcam_stopped(self, filepath: str, duration: float):
+        self._webcam_elapsed_timer.stop()
+        self.webcam_indicator.setVisible(False)
+        self.webcam_btn.setText("🎥 Webcam")
+        self.webcam_btn.setChecked(False)
+
+        if filepath and self.current_note_id:
+            self.db.add_attachment(
+                self.current_note_id, "video",
+                Path(filepath).name, filepath, duration=duration
+            )
+            self._refresh_attachments()
+            self.note_changed.emit(self.current_note_id, self.title_input.text())
+
+    def _on_webcam_error(self, msg: str):
+        self._webcam_elapsed_timer.stop()
+        self.webcam_indicator.setVisible(False)
+        self.webcam_btn.setText("🎥 Webcam")
+        self.webcam_btn.setChecked(False)
+        QMessageBox.warning(self, "Erreur webcam", msg)
+
+    def _update_webcam_elapsed(self):
+        import time as _time
+        elapsed = int(_time.monotonic() - self._webcam_start_time)
+        minutes, seconds = divmod(elapsed, 60)
+        self._webcam_elapsed_label.setText(f"{minutes:02d}:{seconds:02d}")
 
     # ──────────────────────────── Interne ─────────────────────────────
 
