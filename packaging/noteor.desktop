@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Noteor
+GenericName=Gestionnaire de notes
+Comment=Prenez des notes en Markdown avec audio, images et vidéo
+Exec=noteor
+Icon=noteor
+Terminal=false
+Categories=Utility;TextEditor;Recorder;
+Keywords=notes;markdown;audio;video;screenshot;
+StartupWMClass=Noteor

@@ -1,0 +1,15 @@
+Package: noteor
+Version: 1.0.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Depends: python3 (>= 3.10), alsa-utils, python3-dbus, python3-gi
+Recommends: ffmpeg, python3-markdown, python3-pil
+Maintainer: Noteor Project <https://github.com/nouhailler/Noteor>
+Homepage: https://github.com/nouhailler/Noteor
+Description: Gestionnaire de notes local avec support audio, images et vidéo
+ Noteor est une application de bureau pour la prise de notes en Markdown
+ avec enregistrement audio, images, captures d'écran, webcam et export PDF.
+ .
+ Toutes les données sont stockées localement via SQLite.
+ Aucune connexion internet requise.

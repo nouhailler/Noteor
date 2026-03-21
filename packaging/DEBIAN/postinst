@@ -1,0 +1,16 @@
+#!/bin/bash
+set -e
+case "$1" in
+    configure)
+        # Vérification et installation des dépendances Python via pip si besoin
+        for mod in PyQt6 markdown PIL; do
+            if python3 -c "import $mod" 2>/dev/null; then
+                echo "  ✓ $mod"
+            else
+                echo "  ! $mod absent — installez-le : pip3 install $(echo $mod | tr '[:upper:]' '[:lower:]' | sed 's/pil/Pillow/')"
+            fi
+        done
+        echo "Noteor installé. Lancez l'application avec : noteor"
+        ;;
+esac
+exit 0
