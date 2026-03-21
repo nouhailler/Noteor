@@ -1,6 +1,23 @@
-PyQt6>=6.4.0
-sounddevice>=0.4.6
-numpy>=1.21.0
-Pillow>=9.0.0
-markdown>=3.4.0
-soundfile>=0.12.0
+# ─── Noteor — dépendances Python ─────────────────────────────────────────────
+# Versions exactes (pip freeze, Python 3.13, Linux, 2026-03-21)
+
+# ── Interface graphique (obligatoire) ─────────────────────────────────────────
+PyQt6==6.10.2
+PyQt6-Qt6==6.10.2
+PyQt6_sip==13.11.1
+
+# ── Rendu Markdown (obligatoire) ──────────────────────────────────────────────
+Markdown==3.10.2
+
+# ── Images & miniatures (optionnel — repli Qt si absent) ──────────────────────
+pillow==12.1.1
+
+# ── Audio fallback (optionnel — arecord/aplay utilisé en priorité sur Linux) ──
+sounddevice==0.5.5
+soundfile==0.13.1
+numpy==2.4.3
+
+# ── D-Bus / portail XDG — capture d'écran Wayland ────────────────────────────
+# Préférer l'installation système : sudo apt install python3-dbus python3-gi
+# pip en dernier recours uniquement
+dbus-python==1.4.0
