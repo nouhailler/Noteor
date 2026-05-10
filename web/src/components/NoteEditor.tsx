@@ -19,6 +19,7 @@ const HELP_SECTIONS = [
       { label: 'Autocomplétion', description: 'Dès que vous tapez [[, une liste de notes apparaît pour compléter rapidement.' },
       { label: 'Aperçu', description: 'En mode aperçu, les wikilinks vers des notes existantes sont en bleu, en rouge sinon.' },
       { label: 'Navigation', description: 'Cliquer sur un wikilink en aperçu ouvre directement la note liée.' },
+      { label: 'Renommage automatique', description: 'Renommer une note met automatiquement à jour tous les [[liens]] qui pointaient vers son ancien titre.' },
     ],
   },
   {
@@ -52,7 +53,7 @@ const HELP_SECTIONS = [
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, saveNote, getNoteTags, addTagToNote, removeTagFromNote, getNoteAttachments, addAttachment, deleteAttachment, now } from '../db';
+import { db, saveNote, getNoteTags, addTagToNote, removeTagFromNote, getNoteAttachments, addAttachment, deleteAttachment, now, updateWikilinksOnRename } from '../db';
 import { AudioRecorderButton, AudioPlayer } from './AudioRecorder';
 import TagChip from './TagChip';
 import { transcribeAudio, loadSettings } from '../services/openrouter';
@@ -86,8 +87,10 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
   const [transcribing, setTranscribing] = useState(false);
   const [transcribeError, setTranscribeError] = useState('');
   const [wikilinkQuery, setWikilinkQuery] = useState<string | null>(null);
+  const [linkUpdateMsg, setLinkUpdateMsg] = useState('');
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteIdRef = useRef<number | undefined>(note.id);
+  const originalTitleRef = useRef<string>(note.title);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const allNotes = useLiveQuery(() => db.notes.filter(n => !n.is_deleted).toArray()) ?? [];
@@ -104,6 +107,7 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
     setContent(note.content);
     setDirty(false);
     noteIdRef.current = note.id;
+    originalTitleRef.current = note.title;
     if (note.id) {
       getNoteTags(note.id).then(setTags);
       getNoteAttachments(note.id).then(setAttachments);
@@ -114,11 +118,21 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
   }, [note.id]);
 
   const doSave = useCallback(async (t: string, c: string) => {
+    const prevTitle = originalTitleRef.current;
     const updated: Note = { ...note, id: noteIdRef.current, title: t, content: c, updated_at: now() };
     const id = await saveNote(updated);
     noteIdRef.current = id;
+    originalTitleRef.current = t;
     onSaved({ ...updated, id });
     setDirty(false);
+
+    if (prevTitle && prevTitle !== t) {
+      const count = await updateWikilinksOnRename(prevTitle, t);
+      if (count > 0) {
+        setLinkUpdateMsg(`${count} lien${count > 1 ? 's' : ''} mis à jour`);
+        setTimeout(() => setLinkUpdateMsg(''), 3000);
+      }
+    }
   }, [note, onSaved]);
 
   useEffect(() => {
@@ -465,6 +479,14 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Toast lien mis à jour */}
+      {linkUpdateMsg && (
+        <div className="mx-4 mb-2 px-3 py-2 bg-indigo-50 border border-indigo-100 rounded-xl text-xs text-indigo-600 flex items-center gap-1.5">
+          <Link2 size={12} />
+          {linkUpdateMsg}
         </div>
       )}
 

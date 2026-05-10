@@ -182,6 +182,24 @@ export async function findNoteByTitle(title: string): Promise<Note | undefined> 
   return db.notes.filter(n => !n.is_deleted && n.title.toLowerCase() === title.toLowerCase()).first();
 }
 
+// Replace [[oldTitle]] with [[newTitle]] across all notes; returns count of updated notes.
+export async function updateWikilinksOnRename(oldTitle: string, newTitle: string): Promise<number> {
+  if (!oldTitle || oldTitle === newTitle) return 0;
+  const escaped = oldTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`\\[\\[${escaped}\\]\\]`, 'gi');
+  const notes = await db.notes.filter(n => !n.is_deleted).toArray();
+  let count = 0;
+  for (const note of notes) {
+    if (!note.content.includes('[[')) continue;
+    const updated = note.content.replace(pattern, `[[${newTitle}]]`);
+    if (updated !== note.content) {
+      await db.notes.update(note.id!, { content: updated, updated_at: now() });
+      count++;
+    }
+  }
+  return count;
+}
+
 // ─── Opérations en masse ─────────────────────────────────────────────────────
 
 export async function moveNotesBulk(
