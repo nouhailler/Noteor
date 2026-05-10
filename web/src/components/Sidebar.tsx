@@ -1,8 +1,41 @@
 import { useState } from 'react';
-import { X, Folder, Tag as TagIcon, LayoutGrid, Trash2, ChevronRight, Plus } from 'lucide-react';
+import { X, Folder, Tag as TagIcon, LayoutGrid, Trash2, ChevronRight, Plus, HelpCircle } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { getCategories, getFolders, getAllTags, saveCategory, saveFolder, deleteCategory, deleteFolder } from '../db';
+import HelpModal from './HelpModal';
 import type { FilterType, DateFilter } from '../types';
+
+const HELP_SECTIONS = [
+  {
+    title: 'Filtres rapides',
+    items: [
+      { label: 'Type de contenu', description: 'Afficher uniquement les notes avec audio, images, ou toutes les notes.' },
+      { label: 'Période', description: 'Filtrer par date de dernière modification : aujourd\'hui, 7 j, 30 j, cette année.' },
+    ],
+  },
+  {
+    title: 'Organisation',
+    items: [
+      { label: 'Catégories', description: 'Filtrer les notes par catégorie colorée. Bouton + pour créer, × au survol pour supprimer.' },
+      { label: 'Dossiers', description: 'Filtrer les notes par dossier. Bouton + pour créer, × au survol pour supprimer.' },
+      { label: 'Tags', description: 'Cliquer sur un tag pour filtrer les notes qui le portent.' },
+    ],
+  },
+  {
+    title: 'Corbeille',
+    items: [
+      { label: 'Accéder à la corbeille', description: 'Bouton Corbeille en haut du panneau.' },
+      { label: 'Restaurer une note', description: 'Icône ↩ sur une note dans la corbeille.' },
+      { label: 'Supprimer définitivement', description: 'Icône 🗑 sur une note dans la corbeille — irréversible.' },
+    ],
+  },
+  {
+    title: 'Réinitialiser',
+    items: [
+      { label: 'Effacer les filtres', description: 'Lien "Effacer tous les filtres" en haut du panneau quand des filtres sont actifs.' },
+    ],
+  },
+];
 
 interface Props {
   filters: {
@@ -26,6 +59,7 @@ export default function Sidebar({ filters, onFiltersChange, onClose }: Props) {
   const [addingCat, setAddingCat] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [addingFolder, setAddingFolder] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   async function handleAddCategory() {
     if (!newCatName.trim()) return;
@@ -62,6 +96,9 @@ export default function Sidebar({ filters, onFiltersChange, onClose }: Props) {
       {/* Header */}
       <div className="flex items-center px-4 pt-4 pb-3 border-b border-gray-100">
         <span className="font-semibold text-gray-800 flex-1">Filtres &amp; Organisation</span>
+        <button onClick={() => setShowHelp(true)} className="p-1.5 text-gray-400 active:text-gray-600" aria-label="Aide">
+          <HelpCircle size={18} />
+        </button>
         <button onClick={onClose} className="p-1.5 text-gray-400 active:text-gray-700">
           <X size={20} />
         </button>
@@ -211,6 +248,14 @@ export default function Sidebar({ filters, onFiltersChange, onClose }: Props) {
           </div>
         </Section>
       </div>
+
+      {showHelp && (
+        <HelpModal
+          title="Aide — Filtres &amp; Organisation"
+          sections={HELP_SECTIONS}
+          onClose={() => setShowHelp(false)}
+        />
+      )}
     </div>
   );
 }

@@ -1,7 +1,28 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Key, RefreshCw, Check, AlertCircle, ExternalLink, Upload, Download, FileJson } from 'lucide-react';
+import { ArrowLeft, Key, RefreshCw, Check, AlertCircle, ExternalLink, Upload, Download, FileJson, HelpCircle } from 'lucide-react';
 import { fetchFreeModels, loadSettings, saveSettings, type OpenRouterModel } from '../services/openrouter';
 import { exportAllNotes, importNotes, type ExportData } from '../db';
+import HelpModal from './HelpModal';
+
+const HELP_SECTIONS = [
+  {
+    title: 'OpenRouter — Transcription IA',
+    items: [
+      { label: 'Clé API', description: 'Obtenir gratuitement sur openrouter.ai/keys. La clé reste stockée sur cet appareil uniquement.' },
+      { label: 'Actualiser les modèles', description: 'Charge la liste des modèles gratuits (:free) depuis OpenRouter.' },
+      { label: 'Choisir un modèle', description: 'Les modèles marqués "Supporte l\'audio" (en vert) sont recommandés pour la transcription vocale — ex. Gemini Flash.' },
+      { label: 'Utiliser la transcription', description: 'Dans l\'éditeur de note, enregistre un audio puis appuie sur le bouton IA. Le texte est inséré dans la note.' },
+    ],
+  },
+  {
+    title: 'Sauvegarde',
+    items: [
+      { label: 'Exporter', description: 'Télécharge toutes vos notes (actives + corbeille) dans un fichier noteor-export-YYYY-MM-DD.json. Les fichiers médias ne sont pas inclus.' },
+      { label: 'Importer', description: 'Charge un fichier JSON exporté depuis Noteor. Les notes déjà présentes (même identifiant) sont ignorées — aucune donnée n\'est écrasée.' },
+      { label: 'Format JSON', description: 'Le fichier contient : identifiant, titre, contenu Markdown, dates, tags et noms des fichiers joints.' },
+    ],
+  },
+];
 
 interface Props {
   onBack: () => void;
@@ -17,6 +38,7 @@ export default function Settings({ onBack }: Props) {
   const [importStatus, setImportStatus] = useState<{ imported: number; skipped: number; errors: number } | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -100,6 +122,9 @@ export default function Settings({ onBack }: Props) {
           <ArrowLeft size={22} />
         </button>
         <h1 className="text-base font-semibold text-gray-800 flex-1">Paramètres</h1>
+        <button onClick={() => setShowHelp(true)} className="p-1.5 text-gray-400 active:text-gray-600" aria-label="Aide">
+          <HelpCircle size={19} />
+        </button>
         <button
           onClick={handleSave}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
@@ -279,6 +304,14 @@ export default function Settings({ onBack }: Props) {
           </p>
         </section>
       </div>
+
+      {showHelp && (
+        <HelpModal
+          title="Aide — Paramètres"
+          sections={HELP_SECTIONS}
+          onClose={() => setShowHelp(false)}
+        />
+      )}
     </div>
   );
 }

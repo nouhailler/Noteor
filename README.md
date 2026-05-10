@@ -2,68 +2,189 @@
 
 # 📓 Noteor
 
-**Gestionnaire de notes desktop — 100 % local, sans cloud**
+**Application de prise de notes — 100 % locale, sans cloud**
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://python.org)
-[![PyQt6](https://img.shields.io/badge/PyQt6-6.x-41CD52?logo=qt&logoColor=white)](https://pypi.org/project/PyQt6/)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://typescriptlang.org)
 [![SQLite](https://img.shields.io/badge/SQLite-local-003B57?logo=sqlite&logoColor=white)](https://sqlite.org)
-[![Platform](https://img.shields.io/badge/Platform-Linux-FCC624?logo=linux&logoColor=black)](https://kernel.org)
+[![Netlify](https://img.shields.io/badge/Netlify-deploy-00C7B7?logo=netlify&logoColor=white)](https://netlify.com)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-*Prenez des notes en Markdown, enregistrez votre voix, capturez l'écran, filmez depuis la webcam et organisez tout dans des dossiers — le tout stocké localement.*
+*Prenez des notes en Markdown, enregistrez votre voix, organisez dans des dossiers et transcrivez vos audios par IA — tout stocké localement sur votre appareil.*
 
 </div>
 
 ---
 
-## ✨ Fonctionnalités
+## 🗂️ Deux versions
 
-### 📝 Notes & Édition
-- Éditeur **Markdown** avec barre de formatage rapide (gras, italique, code, listes, titres)
-- **Aperçu HTML** en temps réel (rendu Markdown)
-- **Auto-sauvegarde** 3 secondes après la dernière frappe
-- **Tags colorés** — chips dans l'éditeur, filtrage instantané
-
-### 📂 Organisation
-- **Dossiers hiérarchiques** — arborescence de dossiers indépendante, comme un explorateur de fichiers
-- **Glisser-déposer** — déplacez une note dans un dossier en la faisant glisser
-- **Catégories colorées** — arborescence avec bande couleur visible dans la liste
-- **Corbeille** — suppression douce, restauration, suppression définitive
-
-### 🎙️ Audio
-- **Enregistrement micro** depuis l'application (bouton 🎤)
-- Lecture intégrée avec contrôles ▶ / ⏹
-- Backend : `arecord` / `aplay` (ALSA) avec repli sur `sounddevice`
-
-### 🖼️ Images
-- **Import d'images** (PNG, JPG, GIF, WEBP, TIFF…) avec miniatures automatiques
-- **Capture d'écran** (portail XDG — compatible Wayland & X11) avec compte à rebours 3 s
-
-### 🎬 Vidéo
-- **Import de vidéos** (MP4, MKV, AVI, MOV, WEBM…)
-- **Enregistrement webcam** en direct → fichier MP4 (via `ffmpeg` + V4L2)
-- Compteur de durée pendant l'enregistrement
-
-### 🔍 Recherche & Filtres
-- **Recherche full-text** — titre + contenu en temps réel
-- **Filtres par type** : audio 🎤 / images 🖼 / vidéos 🎬
-- **Filtres par date** : aujourd'hui, 7 j, 30 j, cette année, période libre
-- **Filtre par dossier, catégorie ou tag**
-
-### 📄 Export PDF
-- Export de n'importe quelle note en **PDF** (Ctrl+E ou clic droit)
-- Contenu : titre, métadonnées, texte Markdown rendu, **captures d'écran intégrées**
-- Format A4, mise en page soignée
-
-### ❓ Aide intégrée
-- Fenêtre d'aide complète (`F1` ou menu Aide)
-- Navigation par topics : notes, dossiers, audio, vidéo, raccourcis…
+| | Version desktop (Python) | Version web (React) |
+|---|---|---|
+| **Plateforme** | Linux | Navigateur / Mobile (PWA) |
+| **Stockage** | SQLite + fichiers locaux | IndexedDB (navigateur) |
+| **Déploiement** | Application native | Netlify |
+| **Dossier** | racine | `web/` |
 
 ---
 
-## 📸 Interface
+## 📱 Version web — React + PWA
 
-> L'interface est divisée en **3 panneaux** redimensionnables :
+### Fonctionnalités
+
+#### 📝 Notes & Édition
+- Éditeur **Markdown** avec barre de formatage (gras, italique, code, liste, titre)
+- **Aperçu** en temps réel du rendu Markdown
+- **Auto-sauvegarde** 2,5 secondes après la dernière frappe
+- **Tags colorés** — cliquer sur un tag dans l'éditeur filtre la liste
+
+#### 📂 Organisation
+- **Catégories colorées** et **dossiers** (panneau latéral)
+- **Filtres** : par type de contenu, date, catégorie, dossier, tag
+- **Corbeille** — suppression douce, restauration, suppression définitive
+
+#### 🎙️ Audio & Médias
+- **Enregistrement vocal** depuis le navigateur (compatible iOS / Android)
+- **Import d'images** depuis la galerie ou l'appareil photo
+- **Lecteur audio** intégré avec contrôles lecture / pause
+
+#### 🤖 Transcription IA
+- Connexion à **OpenRouter** (modèles gratuits `:free`)
+- Bouton **IA** dans l'éditeur : transcrit l'audio enregistré et insère le texte dans la note
+- Modèles recommandés : Gemini Flash, etc.
+
+#### 💾 Import / Export
+- **Export JSON** : toutes les notes avec tags et noms des fichiers joints
+- **Import JSON** : chargement d'un fichier exporté, déduplication automatique
+
+#### 📲 PWA (Progressive Web App)
+- Installable sur iPhone et Android depuis le navigateur
+- Fonctionne **hors connexion** après la première visite
+- Icône sur l'écran d'accueil
+
+---
+
+### Interface web
+
+```
+Mobile                          Desktop
+──────────────────              ──────────────────────────────────────────────
+┌──────────────────┐            ┌────────────┬────────────┬───────────────────┐
+│ Noteor  ? ⚙  ☰  │            │  Filtres   │  Liste     │  Éditeur          │
+│ 🔍 Rechercher... │            │            │            │                   │
+├──────────────────┤            │ Type       │ • Note 1🎤 │  Titre            │
+│ • Note 1    🎤   │            │ Date       │ • Note 2   │  tag1  tag2       │
+│   Contenu...     │            │ Catégorie  │ • Note 3🖼 │  ─────────────    │
+├──────────────────┤            │ Dossier    │            │  Markdown...      │
+│ • Note 2         │            │ Tags       │            │                   │
+├──────────────────┤            │            │            │ [Audio] [Photo]   │
+│ + Nouvelle note  │            │ 🗑 Corbeille│            │ [IA]              │
+└──────────────────┘            └────────────┴────────────┴───────────────────┘
+```
+
+---
+
+### Aide contextuelle
+
+Chaque écran dispose d'un bouton **?** dans la barre de menu qui affiche une aide contextuelle :
+
+| Écran | Contenu de l'aide |
+|---|---|
+| **Liste des notes** | Navigation, recherche, indicateurs audio/image |
+| **Éditeur** | Markdown, tags, médias, auto-save, transcription IA |
+| **Filtres** | Catégories, dossiers, tags, corbeille |
+| **Paramètres** | OpenRouter, import/export |
+
+---
+
+### Déploiement sur Netlify
+
+1. Forker / cloner le dépôt
+2. Connecter le repo dans [Netlify](https://netlify.com)
+3. Netlify détecte automatiquement `netlify.toml` :
+   - **Build command** : `node scripts/generate-icons.mjs && tsc && vite build`
+   - **Publish directory** : `web/dist`
+4. Déployer — l'app est accessible en HTTPS avec PWA activée
+
+---
+
+### Développement local (web)
+
+```bash
+cd web
+npm install
+npm run dev        # Serveur de développement → http://localhost:5173
+npm run build      # Build production (génère aussi les icônes PNG)
+npm run preview    # Prévisualiser le build
+```
+
+---
+
+### Stack technique (web)
+
+| Composant | Technologie |
+|---|---|
+| Framework | React 18 + TypeScript |
+| Build | Vite 6 |
+| Style | Tailwind CSS v3 + @tailwindcss/typography |
+| Stockage | Dexie.js (IndexedDB) |
+| Markdown | react-markdown + remark-gfm |
+| Icônes | lucide-react |
+| PWA | vite-plugin-pwa (Workbox) |
+| Icônes app | SVG + sharp (PNG auto-généré) |
+| IA | OpenRouter API (modèles `:free`) |
+
+---
+
+### Structure du projet web
+
+```
+web/
+├── public/
+│   ├── icon.svg              # Icône source SVG
+│   ├── pwa-192.png           # Icône PWA 192×192 (auto-générée)
+│   ├── pwa-512.png           # Icône PWA 512×512 (auto-générée)
+│   └── apple-touch-icon.png  # Icône iOS 180×180 (auto-générée)
+├── scripts/
+│   └── generate-icons.mjs    # Génération des PNG depuis icon.svg (sharp)
+├── src/
+│   ├── db/
+│   │   └── index.ts          # Couche Dexie/IndexedDB + export/import JSON
+│   ├── types/
+│   │   └── index.ts          # Interfaces TypeScript
+│   ├── services/
+│   │   └── openrouter.ts     # API OpenRouter (modèles + transcription)
+│   └── components/
+│       ├── NoteList.tsx      # Liste des notes avec recherche et filtres
+│       ├── NoteEditor.tsx    # Éditeur Markdown + tags + médias + IA
+│       ├── Sidebar.tsx       # Panneau filtres & organisation
+│       ├── Settings.tsx      # Paramètres OpenRouter + import/export
+│       ├── AudioRecorder.tsx # Enregistrement et lecture audio
+│       ├── TagChip.tsx       # Composant tag cliquable
+│       └── HelpModal.tsx     # Modal d'aide contextuelle (réutilisable)
+├── netlify.toml              # Config Netlify (build + redirects SPA + headers)
+├── vite.config.ts
+├── tailwind.config.js
+└── package.json
+```
+
+---
+
+## 🖥️ Version desktop — Python / Linux
+
+### Fonctionnalités
+
+- Éditeur **Markdown** avec aperçu HTML en temps réel
+- **Enregistrement audio** (arecord/ALSA + sounddevice)
+- **Capture d'écran** (portail XDG — Wayland & X11)
+- **Enregistrement webcam** (ffmpeg + V4L2)
+- **Import** images et vidéos
+- **Export PDF** (Qt PrintSupport)
+- **Tags**, **catégories** et **dossiers** hiérarchiques
+- **Corbeille** avec restauration
+- Aide intégrée (`F1`)
+
+### Interface desktop
 
 ```
 ┌─────────────────┬─────────────────┬────────────────────────────────┐
@@ -77,52 +198,28 @@
 └─────────────────┴─────────────────┴────────────────────────────────┘
 ```
 
----
-
-## 🚀 Installation
-
-### Prérequis système (Linux)
+### Installation (Linux)
 
 ```bash
-# Debian / Ubuntu / Linux Mint
+# Prérequis
 sudo apt install python3 python3-pip python3-venv \
-                 alsa-utils python3-dbus python3-gi
+                 alsa-utils python3-dbus python3-gi ffmpeg
 
-# Pour l'enregistrement webcam
-sudo apt install ffmpeg
-
-# Optionnel — pour la durée des vidéos importées
-sudo apt install ffprobe
-```
-
-### Installation
-
-```bash
+# Installation
 git clone https://github.com/nouhailler/Noteor.git
 cd Noteor
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-```
 
-### Lancement
-
-```bash
-source venv/bin/activate
+# Lancement
 python3 main.py
 ```
 
-> **Sans venv** (si les dépendances sont dans le Python système) :
-> ```bash
-> python3 main.py
-> ```
-
----
-
-## ⌨️ Raccourcis clavier
+### Raccourcis clavier
 
 | Raccourci | Action |
-|-----------|--------|
+|---|---|
 | `Ctrl+N` | Nouvelle note |
 | `Ctrl+S` | Sauvegarder |
 | `Ctrl+E` | Exporter en PDF |
@@ -130,88 +227,30 @@ python3 main.py
 | `F5` | Actualiser |
 | `Ctrl+Q` | Quitter |
 
----
-
-## 📦 Dépendances Python
-
-```
-PyQt6
-markdown
-Pillow
-sounddevice   # optionnel — fallback audio si arecord absent
-numpy         # requis par sounddevice
-```
-
----
-
-## 🗂️ Structure du projet
-
-```
-Noteor/
-├── main.py                  # Point d'entrée
-├── config.py                # Constantes (chemins, paramètres)
-├── database.py              # Couche SQLite (class Database)
-├── requirements.txt
-├── core/
-│   ├── audio_recorder.py    # AudioRecorder + AudioPlayer
-│   ├── webcam_recorder.py   # WebcamRecorder (ffmpeg + V4L2)
-│   └── file_manager.py      # Images, miniatures, captures, vidéos
-└── ui/
-    ├── main_window.py        # Fenêtre principale (3 panneaux)
-    ├── editor.py             # Panneau éditeur
-    ├── widgets.py            # Composants UI réutilisables
-    ├── help_window.py        # Fenêtre d'aide complète
-    └── styles.py             # Feuille de style QSS
-```
-
----
-
-## 💾 Données locales
-
-Toutes les données sont stockées dans **`~/.local/share/Noteor/`** — rien n'est envoyé sur internet.
+### Données locales
 
 ```
 ~/.local/share/Noteor/
-├── notes.db           # Base SQLite (notes, dossiers, catégories, tags, pièces jointes)
+├── notes.db           # Base SQLite
 └── media/
     ├── audio/         # Enregistrements WAV
-    ├── images/        # Images importées et captures d'écran
-    ├── thumbnails/    # Miniatures (220×160 px)
-    └── video/         # Vidéos importées et enregistrements webcam
+    ├── images/        # Images et captures
+    ├── thumbnails/    # Miniatures
+    └── video/         # Vidéos
 ```
 
----
-
-## 🖥️ Notes de compatibilité
-
-### Wayland
-La capture d'écran utilise le **portail XDG** via D-Bus (`org.freedesktop.portal.Desktop`).
-Noteor bascule automatiquement sur le backend XCB si Wayland est détecté.
-
-```bash
-# Dépendances portail XDG
-sudo apt install python3-dbus python3-gi
-```
-
-### Webcam
-L'enregistrement webcam nécessite `ffmpeg` et un device `/dev/video*`.
-Noteor essaie automatiquement plusieurs modes (MJPEG → RAW, avec/sans audio)
-pour s'adapter à votre matériel.
-
----
-
-## 🛠️ Stack technique
+### Stack technique (desktop)
 
 | Composant | Technologie |
-|-----------|-------------|
-| Interface graphique | PyQt6 |
+|---|---|
+| Interface | PyQt6 |
 | Base de données | SQLite (WAL mode) |
-| Rendu Markdown | `markdown` |
-| Images / Miniatures | Pillow + Qt |
-| Audio | `arecord` / `aplay` (ALSA) + `sounddevice` |
+| Markdown | `markdown` |
+| Images | Pillow + Qt |
+| Audio | `arecord` / `aplay` + `sounddevice` |
 | Capture d'écran | Portail XDG (D-Bus / gi) |
-| Vidéo / Webcam | `ffmpeg` + V4L2 |
-| Export PDF | Qt PrintSupport (`QPrinter` + `QTextDocument`) |
+| Vidéo | `ffmpeg` + V4L2 |
+| Export PDF | Qt PrintSupport |
 
 ---
 

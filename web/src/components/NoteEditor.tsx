@@ -1,5 +1,44 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Save, Bold, Italic, Code, List, Heading2, Eye, EyeOff, Image as ImageIcon, Trash2, X, Plus, Sparkles, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, Bold, Italic, Code, List, Heading2, Eye, EyeOff, Image as ImageIcon, Trash2, X, Plus, Sparkles, Loader2, HelpCircle } from 'lucide-react';
+import HelpModal from './HelpModal';
+
+const HELP_SECTIONS = [
+  {
+    title: 'Saisie',
+    items: [
+      { label: 'Titre', description: 'Champ de titre en haut de l\'éditeur.' },
+      { label: 'Contenu Markdown', description: 'Zone de texte principale. Utilise la syntaxe Markdown pour le formatage.' },
+      { label: 'Aperçu', description: 'Bouton "Aperçu" (œil) pour basculer entre l\'édition et le rendu visuel.' },
+      { label: 'Auto-sauvegarde', description: 'La note est enregistrée automatiquement 2,5 secondes après la dernière frappe.' },
+    ],
+  },
+  {
+    title: 'Tags',
+    items: [
+      { label: 'Filtrer par tag', description: 'Cliquer sur le nom d\'un tag pour revenir à la liste filtrée sur ce tag.' },
+      { label: 'Ajouter un tag', description: 'Bouton "+ Tag" : saisir un nom puis Entrée. Le tag est créé s\'il n\'existe pas.' },
+      { label: 'Supprimer un tag', description: 'Cliquer sur × à droite du tag pour le retirer de la note.' },
+    ],
+  },
+  {
+    title: 'Formatage Markdown',
+    items: [
+      { label: 'Gras (B)', description: '**texte** — met la sélection en gras.' },
+      { label: 'Italique (I)', description: '*texte* — met la sélection en italique.' },
+      { label: 'Code (◇)', description: '`texte` — formate la sélection en code inline.' },
+      { label: 'Liste (≡)', description: 'Insère un élément de liste à puces (- ).' },
+      { label: 'Titre (H2)', description: 'Insère un titre de niveau 2 (## ).' },
+    ],
+  },
+  {
+    title: 'Médias',
+    items: [
+      { label: 'Audio', description: 'Enregistre un mémo vocal via le micro. Appuyer à nouveau pour arrêter.' },
+      { label: 'Photo', description: 'Importe une image depuis la galerie ou l\'appareil photo.' },
+      { label: 'IA (transcription)', description: 'Visible uniquement si la note contient un audio. Envoie l\'enregistrement à OpenRouter et insère la transcription dans le texte.' },
+    ],
+  },
+];
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { saveNote, getNoteTags, addTagToNote, removeTagFromNote, getNoteAttachments, addAttachment, deleteAttachment, now } from '../db';
@@ -24,6 +63,7 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick }: Props)
   const [showTagInput, setShowTagInput] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dirty, setDirty] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [transcribeError, setTranscribeError] = useState('');
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -179,6 +219,13 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick }: Props)
           <span className="text-xs text-gray-400">Modification...</span>
         )}
         <button
+          onClick={() => setShowHelp(true)}
+          className="p-1.5 text-gray-400 active:text-gray-600"
+          aria-label="Aide"
+        >
+          <HelpCircle size={19} />
+        </button>
+        <button
           onClick={() => doSave(title, content)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm active:bg-indigo-700"
         >
@@ -326,6 +373,14 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick }: Props)
           <Trash2 size={18} />
         </button>
       </div>
+
+      {showHelp && (
+        <HelpModal
+          title="Aide — Éditeur de note"
+          sections={HELP_SECTIONS}
+          onClose={() => setShowHelp(false)}
+        />
+      )}
     </div>
   );
 }

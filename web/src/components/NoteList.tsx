@@ -1,8 +1,40 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, SlidersHorizontal, Mic, Image, Video, Trash2, RotateCcw, Settings } from 'lucide-react';
+import { Search, Plus, SlidersHorizontal, Mic, Image, Video, Trash2, RotateCcw, Settings, HelpCircle } from 'lucide-react';
 import { db, getNotes, restoreNote, permanentlyDeleteNote } from '../db';
 import { useLiveQuery } from 'dexie-react-hooks';
+import HelpModal from './HelpModal';
 import type { Note, FilterType, DateFilter } from '../types';
+
+const HELP_SECTIONS = [
+  {
+    title: 'Navigation',
+    items: [
+      { label: 'Ouvrir une note', description: 'Appuyer sur une note dans la liste pour l\'ouvrir dans l\'éditeur.' },
+      { label: 'Nouvelle note', description: 'Bouton + en haut à droite pour créer une note vide.' },
+    ],
+  },
+  {
+    title: 'Recherche',
+    items: [
+      { label: 'Recherche en temps réel', description: 'Saisir dans la barre de recherche pour filtrer par titre et contenu simultanément.' },
+    ],
+  },
+  {
+    title: 'Barre d\'outils',
+    items: [
+      { label: 'Filtres (⊞)', description: 'Ouvrir le panneau de filtres : type de contenu, date, catégorie, dossier, tag.' },
+      { label: 'Paramètres (⚙)', description: 'Configurer la clé OpenRouter pour l\'IA, exporter ou importer vos notes.' },
+    ],
+  },
+  {
+    title: 'Indicateurs',
+    items: [
+      { label: '🎤  Audio', description: 'La note contient au moins un enregistrement audio.' },
+      { label: '🖼  Image', description: 'La note contient au moins une image.' },
+      { label: 'Bande couleur', description: 'Indique la catégorie attribuée à la note.' },
+    ],
+  },
+];
 
 interface Props {
   selectedNoteId: number | null;
@@ -31,6 +63,7 @@ export default function NoteList({
   filters,
   onSearchChange,
 }: Props) {
+  const [showHelp, setShowHelp] = useState(false);
   const notes = useLiveQuery(
     () => getNotes({
       search: filters.search,
@@ -92,6 +125,13 @@ export default function NoteList({
         <h1 className="text-lg font-bold text-indigo-600 flex-1">
           {filters.deleted ? 'Corbeille' : 'Noteor'}
         </h1>
+        <button
+          onClick={() => setShowHelp(true)}
+          className="p-2 rounded-lg text-gray-400 active:bg-gray-100"
+          aria-label="Aide"
+        >
+          <HelpCircle size={19} />
+        </button>
         <button
           onClick={onOpenSettings}
           className="p-2 rounded-lg text-gray-400 active:bg-gray-100"
@@ -192,6 +232,14 @@ export default function NoteList({
           </ul>
         )}
       </div>
+
+      {showHelp && (
+        <HelpModal
+          title="Aide — Liste des notes"
+          sections={HELP_SECTIONS}
+          onClose={() => setShowHelp(false)}
+        />
+      )}
     </div>
   );
 }
