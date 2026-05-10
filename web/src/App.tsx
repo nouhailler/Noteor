@@ -4,6 +4,7 @@ import NoteEditor from './components/NoteEditor';
 import Sidebar from './components/Sidebar';
 import Settings from './components/Settings';
 import CalendarView from './components/CalendarView';
+import GraphView from './components/GraphView';
 import { db, now, findNoteByTitle } from './db';
 import type { Note, FilterType, DateFilter, View } from './types';
 
@@ -24,7 +25,7 @@ const DEFAULT_FILTERS: Filters = {
   deleted: false,
 };
 
-type AppView = View | 'settings' | 'calendar';
+type AppView = View | 'settings' | 'calendar' | 'graph';
 
 function makeNewNote(): Note {
   const t = now();
@@ -111,6 +112,21 @@ export default function App() {
     );
   }
 
+  // ── Vue graphique ─────────────────────────────────────────────────────────
+  if (view === 'graph') {
+    return (
+      <div className="flex h-screen-safe overflow-hidden">
+        {sidebar}
+        <div className="flex flex-col flex-1 min-w-0">
+          <GraphView
+            onSelectNote={note => { setCurrentNote(note); setView('editor'); }}
+            onBack={() => setView('list')}
+          />
+        </div>
+      </div>
+    );
+  }
+
   // ── Vue principale (liste + éditeur) ────────────────────────────────────
   return (
     <div className="flex h-screen-safe overflow-hidden">
@@ -142,6 +158,7 @@ export default function App() {
           onOpenSidebar={() => setView('sidebar')}
           onOpenSettings={() => setView('settings')}
           onOpenCalendar={() => setView('calendar')}
+          onOpenGraph={() => setView('graph')}
           filters={filters}
           onSearchChange={s => mergeFilters({ search: s })}
         />

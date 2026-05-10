@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, SlidersHorizontal, Mic, Image, Video, Trash2, RotateCcw, Settings, HelpCircle, CalendarDays, X, CheckSquare } from 'lucide-react';
+import { Search, Plus, SlidersHorizontal, Mic, Image, Video, Trash2, RotateCcw, Settings, HelpCircle, CalendarDays, Network, X, CheckSquare } from 'lucide-react';
 import { db, getNotes, restoreNote, permanentlyDeleteNote } from '../db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import HelpModal from './HelpModal';
@@ -52,6 +52,7 @@ interface Props {
   onOpenSidebar: () => void;
   onOpenSettings: () => void;
   onOpenCalendar: () => void;
+  onOpenGraph: () => void;
   filters: {
     search: string;
     categoryId?: number;
@@ -71,6 +72,7 @@ export default function NoteList({
   onOpenSidebar,
   onOpenSettings,
   onOpenCalendar,
+  onOpenGraph,
   filters,
   onSearchChange,
 }: Props) {
@@ -206,6 +208,13 @@ export default function NoteList({
             aria-label="Calendrier"
           >
             <CalendarDays size={19} />
+          </button>
+          <button
+            onClick={onOpenGraph}
+            className="p-2 rounded-lg text-gray-400 active:bg-gray-100"
+            aria-label="Vue graphique"
+          >
+            <Network size={19} />
           </button>
           <button
             onClick={() => setShowHelp(true)}
