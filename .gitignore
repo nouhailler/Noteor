@@ -26,6 +26,10 @@ media/
 *.swp
 *~
 
+# React / Node
+web/node_modules/
+web/dist/
+
 # Claude Code
 .claude/
 
