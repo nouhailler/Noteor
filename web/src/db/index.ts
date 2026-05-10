@@ -178,6 +178,54 @@ export async function getAllTags(): Promise<Tag[]> {
   return db.tags.toArray();
 }
 
+// ─── Opérations en masse ─────────────────────────────────────────────────────
+
+export async function moveNotesBulk(
+  ids: number[],
+  opts: { folderId?: number | null; categoryId?: number | null }
+): Promise<void> {
+  const update: Partial<Note> = {};
+  if ('folderId' in opts) update.folder_id = opts.folderId ?? undefined;
+  if ('categoryId' in opts) update.category_id = opts.categoryId ?? undefined;
+  for (const id of ids) await db.notes.update(id, update);
+}
+
+export async function tagNotesBulk(ids: number[], tagName: string): Promise<void> {
+  for (const id of ids) await addTagToNote(id, tagName);
+}
+
+export async function deleteNotesBulk(ids: number[]): Promise<void> {
+  const ts = now();
+  for (const id of ids) await db.notes.update(id, { is_deleted: true, deleted_at: ts });
+}
+
+export async function exportSelectedNotes(ids: number[]): Promise<ExportData> {
+  const notes = await db.notes.where('id').anyOf(ids).toArray();
+  const exportedNotes: ExportNote[] = [];
+  for (const note of notes) {
+    if (!note.id) continue;
+    const tags = await getNoteTags(note.id);
+    const attachments = await db.attachments.where('note_id').equals(note.id).toArray();
+    exportedNotes.push({
+      id: note.id,
+      title: note.title,
+      content: note.content,
+      created_at: note.created_at,
+      updated_at: note.updated_at,
+      is_deleted: note.is_deleted,
+      deleted_at: note.deleted_at,
+      tags: tags.map(t => ({ name: t.name, color: t.color })),
+      attachments: attachments.map(a => ({
+        type: a.type,
+        filename: a.filename,
+        filepath: a.filename,
+        duration: a.duration,
+      })),
+    });
+  }
+  return { version: '1.0', app: 'Noteor', exported_at: new Date().toISOString(), notes: exportedNotes };
+}
+
 // ─── Export / Import ────────────────────────────────────────────────────────
 
 export interface ExportAttachment {
