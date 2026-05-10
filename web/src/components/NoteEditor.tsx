@@ -12,9 +12,10 @@ interface Props {
   note: Note;
   onBack: () => void;
   onSaved: (note: Note) => void;
+  onTagClick: (tag: Tag) => void;
 }
 
-export default function NoteEditor({ note, onBack, onSaved }: Props) {
+export default function NoteEditor({ note, onBack, onSaved, onTagClick }: Props) {
   const [title, setTitle] = useState(note.title);
   const [content, setContent] = useState(note.content);
   const [preview, setPreview] = useState(false);
@@ -200,7 +201,7 @@ export default function NoteEditor({ note, onBack, onSaved }: Props) {
       {/* Tags */}
       <div className="px-4 pb-2 flex flex-wrap items-center gap-1.5 min-h-[32px]">
         {tags.map(tag => (
-          <TagChip key={tag.id} tag={tag} onRemove={() => handleRemoveTag(tag.id!)} />
+          <TagChip key={tag.id} tag={tag} onRemove={() => handleRemoveTag(tag.id!)} onClick={() => onTagClick(tag)} />
         ))}
         {showTagInput ? (
           <div className="flex items-center gap-1">

@@ -58,6 +58,12 @@ export default function App() {
     setCurrentNote(null);
   }
 
+  function handleTagClick(tag: { id?: number }) {
+    mergeFilters({ tagId: tag.id, categoryId: undefined, folderId: undefined });
+    setView('list');
+    setCurrentNote(null);
+  }
+
   // Page Paramètres — plein écran mobile, panneau droit desktop
   if (view === 'settings') {
     return (
@@ -126,6 +132,7 @@ export default function App() {
             note={currentNote}
             onBack={handleBack}
             onSaved={handleSaved}
+            onTagClick={handleTagClick}
           />
         ) : (
           <div className="hidden md:flex flex-1 items-center justify-center text-gray-300">
