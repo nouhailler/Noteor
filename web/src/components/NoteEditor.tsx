@@ -15,11 +15,17 @@ const HELP_SECTIONS = [
   {
     title: 'Wikilinks',
     items: [
-      { label: 'Syntaxe', description: 'Écrire [[Titre de la note]] pour créer un lien interne vers une autre note.' },
-      { label: 'Autocomplétion', description: 'Dès que vous tapez [[, une liste de notes apparaît pour compléter rapidement.' },
-      { label: 'Aperçu', description: 'En mode aperçu, les wikilinks vers des notes existantes sont en bleu, en rouge sinon.' },
+      { label: 'Syntaxe', description: 'Écrire [[Titre de la note]] pour créer un lien interne. L\'ID est stocké automatiquement.' },
+      { label: 'Autocomplétion', description: 'Dès que vous tapez [[, une liste de notes apparaît. Entrée insère la première suggestion.' },
+      { label: 'Aperçu', description: 'Les liens vers des notes existantes apparaissent en bleu, en rouge si la note est introuvable.' },
       { label: 'Navigation', description: 'Cliquer sur un wikilink en aperçu ouvre directement la note liée.' },
-      { label: 'Renommage automatique', description: 'Renommer une note met automatiquement à jour tous les [[liens]] qui pointaient vers son ancien titre.' },
+      { label: 'Renommage automatique', description: 'Renommer une note met à jour tous les liens qui la pointaient.' },
+    ],
+  },
+  {
+    title: 'Backlinks',
+    items: [
+      { label: 'Cette note est liée par', description: 'Section en bas de l\'éditeur listant toutes les notes qui contiennent un lien vers la note courante.' },
     ],
   },
   {
@@ -53,7 +59,11 @@ const HELP_SECTIONS = [
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, saveNote, getNoteTags, addTagToNote, removeTagFromNote, getNoteAttachments, addAttachment, deleteAttachment, now, updateWikilinksOnRename } from '../db';
+import {
+  db, saveNote, getNoteTags, addTagToNote, removeTagFromNote,
+  getNoteAttachments, addAttachment, deleteAttachment,
+  now, updateWikilinksOnRename, getBacklinks,
+} from '../db';
 import { AudioRecorderButton, AudioPlayer } from './AudioRecorder';
 import TagChip from './TagChip';
 import { transcribeAudio, loadSettings } from '../services/openrouter';
@@ -64,14 +74,21 @@ interface Props {
   onBack: () => void;
   onSaved: (note: Note) => void;
   onTagClick: (tag: Tag) => void;
-  onWikilinkClick: (title: string) => void;
+  onWikilinkClick: (title: string, id?: number) => void;
 }
 
-// Convert [[Title]] to [Title](wikilink:Title) for ReactMarkdown
+// [[Title|id]] → [Title](wikilink-id:id:Title)   canonical (ID-based)
+// [[Title]]    → [Title](wikilink:Title)           legacy (title-based fallback)
 function preprocessWikilinks(content: string): string {
-  return content.replace(/\[\[([^\][\n]+)\]\]/g, (_, title) =>
-    `[${title}](wikilink:${encodeURIComponent(title)})`
+  let result = content.replace(
+    /\[\[([^\]|[\n]+)\|(\d+)\]\]/g,
+    (_, title, id) => `[${title}](wikilink-id:${id}:${encodeURIComponent(title)})`,
   );
+  result = result.replace(
+    /\[\[([^\]|[\n]+)\]\]/g,
+    (_, title) => `[${title}](wikilink:${encodeURIComponent(title)})`,
+  );
+  return result;
 }
 
 export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikilinkClick }: Props) {
@@ -93,14 +110,22 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
   const originalTitleRef = useRef<string>(note.title);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // All notes for autocomplete + wikilink resolution
   const allNotes = useLiveQuery(() => db.notes.filter(n => !n.is_deleted).toArray()) ?? [];
 
+  // Autocomplete suggestions filtered by typed query
   const wikilinkSuggestions = wikilinkQuery !== null
     ? allNotes
         .filter(n => n.id !== noteIdRef.current && n.title)
         .filter(n => n.title.toLowerCase().includes(wikilinkQuery.toLowerCase()))
         .slice(0, 6)
     : [];
+
+  // Backlinks: notes that link to the current note (reactive, updates live)
+  const backlinks = useLiveQuery(
+    () => (noteIdRef.current ? getBacklinks(noteIdRef.current, title) : Promise.resolve([])),
+    [title],
+  ) ?? [];
 
   useEffect(() => {
     setTitle(note.title);
@@ -126,8 +151,9 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
     onSaved({ ...updated, id });
     setDirty(false);
 
-    if (prevTitle && prevTitle !== t) {
-      const count = await updateWikilinksOnRename(prevTitle, t);
+    // Propagate rename to all wikilinks pointing to this note
+    if (prevTitle && prevTitle !== t && id) {
+      const count = await updateWikilinksOnRename(prevTitle, t, id);
       if (count > 0) {
         setLinkUpdateMsg(`${count} lien${count > 1 ? 's' : ''} mis à jour`);
         setTimeout(() => setLinkUpdateMsg(''), 3000);
@@ -164,9 +190,8 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
     const cursor = e.target.selectionStart;
     setContent(val);
     markDirty();
-
-    const before = val.slice(0, cursor);
-    const match = before.match(/\[\[([^\][\n]*)$/);
+    // Detect [[partial title (stop at | so existing [[Title|id]] don't re-trigger)
+    const match = val.slice(0, cursor).match(/\[\[([^\]|[\n]*)$/);
     setWikilinkQuery(match ? match[1] : null);
   }
 
@@ -177,25 +202,27 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
       setWikilinkQuery(null);
     } else if (e.key === 'Enter' && wikilinkSuggestions.length > 0) {
       e.preventDefault();
-      insertWikilink(wikilinkSuggestions[0].title);
+      insertWikilink(wikilinkSuggestions[0].id!, wikilinkSuggestions[0].title);
     }
   }
 
-  function insertWikilink(noteTitle: string) {
+  // Insert [[Title|id]] at the current [[ position
+  function insertWikilink(id: number, noteTitle: string) {
     const ta = textareaRef.current;
     if (!ta) return;
     const cursor = ta.selectionStart;
     const before = content.slice(0, cursor);
-    const match = before.match(/\[\[([^\][\n]*)$/);
+    const match = before.match(/\[\[([^\]|[\n]*)$/);
     if (!match) return;
     const start = cursor - match[0].length;
-    const newContent = content.slice(0, start) + `[[${noteTitle}]]` + content.slice(cursor);
+    const replacement = `[[${noteTitle}|${id}]]`;
+    const newContent = content.slice(0, start) + replacement + content.slice(cursor);
     setContent(newContent);
     setDirty(true);
     setWikilinkQuery(null);
     setTimeout(() => {
       ta.focus();
-      const newPos = start + noteTitle.length + 4;
+      const newPos = start + replacement.length;
       ta.setSelectionRange(newPos, newPos);
     }, 0);
   }
@@ -261,14 +288,12 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
   async function handleTranscribe() {
     const audioAttachments = attachments.filter(a => a.type === 'audio');
     if (!audioAttachments.length) return;
-
     const { openrouterKey, selectedModel } = loadSettings();
     if (!openrouterKey || !selectedModel) {
       setTranscribeError('Configure ta clé API et un modèle dans les Paramètres.');
       setTimeout(() => setTranscribeError(''), 4000);
       return;
     }
-
     setTranscribing(true);
     setTranscribeError('');
     try {
@@ -278,8 +303,7 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
         if (text) results.push(text);
       }
       if (results.length) {
-        const insertion = '\n\n' + results.join('\n\n');
-        setContent(prev => prev + insertion);
+        setContent(prev => prev + '\n\n' + results.join('\n\n'));
         setDirty(true);
       }
     } catch (e) {
@@ -291,6 +315,48 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
     }
   }
 
+  // ReactMarkdown custom <a> handler
+  function WikilinkAnchor({ href, children }: { href?: string; children?: React.ReactNode }) {
+    if (href?.startsWith('wikilink-id:')) {
+      // [[Title|id]] — resolve by ID
+      const rest = href.slice('wikilink-id:'.length);
+      const colon = rest.indexOf(':');
+      const id = Number(rest.slice(0, colon));
+      const noteTitle = decodeURIComponent(rest.slice(colon + 1));
+      const exists = allNotes.some(n => n.id === id);
+      return (
+        <button
+          onClick={() => onWikilinkClick(noteTitle, id)}
+          className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-sm font-medium no-underline transition-colors
+            ${exists ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100' : 'text-red-500 bg-red-50 hover:bg-red-100'}`}
+          title={exists ? `Ouvrir « ${noteTitle} »` : `Note introuvable : « ${noteTitle} »`}
+        >
+          <Link2 size={11} className="shrink-0" />
+          {children}
+          {!exists && <span className="text-[9px] font-bold">?</span>}
+        </button>
+      );
+    }
+    if (href?.startsWith('wikilink:')) {
+      // [[Title]] — legacy, resolve by title
+      const noteTitle = decodeURIComponent(href.slice('wikilink:'.length));
+      const exists = allNotes.some(n => n.title.toLowerCase() === noteTitle.toLowerCase());
+      return (
+        <button
+          onClick={() => onWikilinkClick(noteTitle)}
+          className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-sm font-medium no-underline transition-colors
+            ${exists ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100' : 'text-red-500 bg-red-50 hover:bg-red-100'}`}
+          title={exists ? `Ouvrir « ${noteTitle} »` : `Note introuvable : « ${noteTitle} »`}
+        >
+          <Link2 size={11} className="shrink-0" />
+          {children}
+          {!exists && <span className="text-[9px] font-bold">?</span>}
+        </button>
+      );
+    }
+    return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+  }
+
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Header */}
@@ -299,14 +365,8 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
           <ArrowLeft size={22} />
         </button>
         <div className="flex-1" />
-        {dirty && (
-          <span className="text-xs text-gray-400">Modification...</span>
-        )}
-        <button
-          onClick={() => setShowHelp(true)}
-          className="p-1.5 text-gray-400 active:text-gray-600"
-          aria-label="Aide"
-        >
+        {dirty && <span className="text-xs text-gray-400">Modification...</span>}
+        <button onClick={() => setShowHelp(true)} className="p-1.5 text-gray-400 active:text-gray-600" aria-label="Aide">
           <HelpCircle size={19} />
         </button>
         <button
@@ -342,7 +402,10 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
               placeholder="Nouveau tag..."
               value={tagInput}
               onChange={e => setTagInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleAddTag(); if (e.key === 'Escape') { setShowTagInput(false); setTagInput(''); }}}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleAddTag();
+                if (e.key === 'Escape') { setShowTagInput(false); setTagInput(''); }
+              }}
               className="text-xs border border-indigo-300 rounded-full px-2.5 py-0.5 outline-none w-28 focus:border-indigo-500"
             />
             <button onClick={handleAddTag} className="text-indigo-600 active:opacity-70"><Plus size={14} /></button>
@@ -388,30 +451,7 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
           <div className="px-4 py-3 prose prose-sm max-w-none">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              components={{
-                a: ({ href, children }) => {
-                  if (href?.startsWith('wikilink:')) {
-                    const noteTitle = decodeURIComponent(href.slice('wikilink:'.length));
-                    const exists = allNotes.some(n => n.title.toLowerCase() === noteTitle.toLowerCase());
-                    return (
-                      <button
-                        onClick={() => onWikilinkClick(noteTitle)}
-                        className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-sm font-medium no-underline transition-colors
-                          ${exists
-                            ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'
-                            : 'text-red-500 bg-red-50 hover:bg-red-100'
-                          }`}
-                        title={exists ? `Ouvrir « ${noteTitle} »` : `Note introuvable : « ${noteTitle} »`}
-                      >
-                        <Link2 size={11} className="shrink-0" />
-                        {children}
-                        {!exists && <span className="text-[9px] font-bold">?</span>}
-                      </button>
-                    );
-                  }
-                  return <a href={href} target="_blank" rel="noopener noreferrer">{children as React.ReactNode}</a>;
-                },
-              }}
+              components={{ a: WikilinkAnchor as never }}
             >
               {preprocessWikilinks(content) || '*Aucun contenu*'}
             </ReactMarkdown>
@@ -422,10 +462,7 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
             value={content}
             onChange={handleContentChange}
             onKeyDown={handleTextareaKeyDown}
-            onBlur={() => {
-              // Delay so onMouseDown on a suggestion fires first
-              setTimeout(() => setWikilinkQuery(null), 150);
-            }}
+            onBlur={() => setTimeout(() => setWikilinkQuery(null), 150)}
             placeholder="Commencez à écrire en Markdown…"
             className="w-full h-full px-4 py-3 text-sm text-gray-800 placeholder-gray-300 outline-none resize-none bg-transparent font-mono leading-relaxed"
           />
@@ -438,11 +475,11 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
           <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-indigo-50">
             <Link2 size={12} className="text-indigo-400 shrink-0" />
             <span className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wide">
-              Wikilink — {wikilinkQuery ? `"${wikilinkQuery}"` : 'tapez pour filtrer…'}
+              {wikilinkQuery ? `"${wikilinkQuery}"` : 'Tapez pour filtrer…'}
             </span>
             <button
               onMouseDown={e => { e.preventDefault(); setWikilinkQuery(null); }}
-              className="ml-auto text-gray-400 hover:text-gray-600 active:opacity-70"
+              className="ml-auto text-gray-400 hover:text-gray-600"
             >
               <X size={14} />
             </button>
@@ -455,14 +492,37 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
             wikilinkSuggestions.map(n => (
               <button
                 key={n.id}
-                onMouseDown={e => { e.preventDefault(); insertWikilink(n.title); }}
+                onMouseDown={e => { e.preventDefault(); insertWikilink(n.id!, n.title); }}
                 className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-left hover:bg-indigo-50 active:bg-indigo-100 transition-colors border-b border-gray-50 last:border-0"
               >
                 <Link2 size={13} className="text-indigo-400 shrink-0" />
                 <span className="truncate text-gray-800">{n.title}</span>
+                <span className="ml-auto text-[10px] text-gray-300 shrink-0">#{n.id}</span>
               </button>
             ))
           )}
+        </div>
+      )}
+
+      {/* Backlinks */}
+      {backlinks.length > 0 && (
+        <div className="border-t border-gray-100 px-4 py-3">
+          <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+            <Link2 size={11} />
+            Cette note est liée par
+          </p>
+          <div className="flex flex-col gap-0.5">
+            {backlinks.map(n => (
+              <button
+                key={n.id}
+                onClick={() => onWikilinkClick(n.title, n.id)}
+                className="flex items-center gap-2 w-full text-sm text-left text-gray-700 hover:text-indigo-600 active:opacity-70 py-1 px-1 rounded-lg hover:bg-indigo-50 transition-colors"
+              >
+                <Link2 size={12} className="text-gray-300 shrink-0" />
+                <span className="truncate">{n.title || 'Sans titre'}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -507,15 +567,12 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
           <ImageIcon size={16} />
           <span className="text-sm">Photo</span>
         </button>
-
         {attachments.some(a => a.type === 'audio') && (
           <button
             onClick={handleTranscribe}
             disabled={transcribing}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              transcribing
-                ? 'bg-indigo-100 text-indigo-400'
-                : 'bg-indigo-600 text-white active:bg-indigo-700'
+              transcribing ? 'bg-indigo-100 text-indigo-400' : 'bg-indigo-600 text-white active:bg-indigo-700'
             }`}
             title="Transcrire l'audio en texte via IA"
           >
@@ -523,7 +580,6 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
             IA
           </button>
         )}
-
         <div className="flex-1" />
         <button
           onClick={async () => {
@@ -552,13 +608,11 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikili
 
 function ImageAttachment({ attachment, onDelete }: { attachment: Attachment; onDelete: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
-
   useEffect(() => {
     const objUrl = URL.createObjectURL(attachment.data);
     setUrl(objUrl);
     return () => URL.revokeObjectURL(objUrl);
   }, [attachment.data]);
-
   return (
     <div className="relative shrink-0">
       {url && (

@@ -4,7 +4,7 @@ import NoteEditor from './components/NoteEditor';
 import Sidebar from './components/Sidebar';
 import Settings from './components/Settings';
 import CalendarView from './components/CalendarView';
-import { now, findNoteByTitle } from './db';
+import { db, now, findNoteByTitle } from './db';
 import type { Note, FilterType, DateFilter, View } from './types';
 
 interface Filters {
@@ -65,8 +65,13 @@ export default function App() {
     setCurrentNote(null);
   }
 
-  async function handleWikilinkClick(title: string) {
-    const found = await findNoteByTitle(title);
+  async function handleWikilinkClick(title: string, id?: number) {
+    let found: Note | undefined;
+    if (id) {
+      const byId = await db.notes.get(id);
+      if (byId && !byId.is_deleted) found = byId;
+    }
+    if (!found) found = await findNoteByTitle(title);
     if (found) {
       setCurrentNote(found);
       setView('editor');

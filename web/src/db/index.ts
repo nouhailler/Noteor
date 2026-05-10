@@ -182,16 +182,39 @@ export async function findNoteByTitle(title: string): Promise<Note | undefined> 
   return db.notes.filter(n => !n.is_deleted && n.title.toLowerCase() === title.toLowerCase()).first();
 }
 
-// Replace [[oldTitle]] with [[newTitle]] across all notes; returns count of updated notes.
-export async function updateWikilinksOnRename(oldTitle: string, newTitle: string): Promise<number> {
+// Returns all non-deleted notes (excluding self) that contain a wikilink pointing to noteId.
+// Checks both [[Title|id]] (ID-based, canonical) and legacy [[Title]] (title-based, fallback).
+export async function getBacklinks(noteId: number, noteTitle: string): Promise<Note[]> {
+  const idFragment = `|${noteId}]]`;
+  const titleLower = noteTitle.toLowerCase();
+  const notes = await db.notes.filter(n => !n.is_deleted && n.id !== noteId).toArray();
+  return notes.filter(n => {
+    if (!n.content.includes('[[')) return false;
+    if (n.content.includes(idFragment)) return true;
+    return n.content.toLowerCase().includes(`[[${titleLower}]]`);
+  });
+}
+
+// Update wikilinks across all notes when a note is renamed.
+// Handles [[OldTitle|id]] → [[NewTitle|id]] (canonical)
+// and [[OldTitle]] → [[NewTitle|id]] (legacy → upgrade to ID-based).
+// Returns the number of notes updated.
+export async function updateWikilinksOnRename(
+  oldTitle: string,
+  newTitle: string,
+  noteId: number,
+): Promise<number> {
   if (!oldTitle || oldTitle === newTitle) return 0;
   const escaped = oldTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(`\\[\\[${escaped}\\]\\]`, 'gi');
+  const withId = new RegExp(`\\[\\[${escaped}\\|${noteId}\\]\\]`, 'gi');
+  const legacy  = new RegExp(`\\[\\[${escaped}\\]\\]`, 'gi');
   const notes = await db.notes.filter(n => !n.is_deleted).toArray();
   let count = 0;
   for (const note of notes) {
     if (!note.content.includes('[[')) continue;
-    const updated = note.content.replace(pattern, `[[${newTitle}]]`);
+    const updated = note.content
+      .replace(withId, `[[${newTitle}|${noteId}]]`)
+      .replace(legacy,  `[[${newTitle}|${noteId}]]`); // upgrade legacy → id-based
     if (updated !== note.content) {
       await db.notes.update(note.id!, { content: updated, updated_at: now() });
       count++;
