@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, SlidersHorizontal, Mic, Image, Video, Trash2, RotateCcw, Settings, HelpCircle } from 'lucide-react';
+import { Search, Plus, SlidersHorizontal, Mic, Image, Video, Trash2, RotateCcw, Settings, HelpCircle, CalendarDays } from 'lucide-react';
 import { db, getNotes, restoreNote, permanentlyDeleteNote } from '../db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import HelpModal from './HelpModal';
@@ -42,6 +42,7 @@ interface Props {
   onNewNote: () => void;
   onOpenSidebar: () => void;
   onOpenSettings: () => void;
+  onOpenCalendar: () => void;
   filters: {
     search: string;
     categoryId?: number;
@@ -60,6 +61,7 @@ export default function NoteList({
   onNewNote,
   onOpenSidebar,
   onOpenSettings,
+  onOpenCalendar,
   filters,
   onSearchChange,
 }: Props) {
@@ -125,6 +127,13 @@ export default function NoteList({
         <h1 className="text-lg font-bold text-indigo-600 flex-1">
           {filters.deleted ? 'Corbeille' : 'Noteor'}
         </h1>
+        <button
+          onClick={onOpenCalendar}
+          className="p-2 rounded-lg text-gray-400 active:bg-gray-100"
+          aria-label="Calendrier"
+        >
+          <CalendarDays size={19} />
+        </button>
         <button
           onClick={() => setShowHelp(true)}
           className="p-2 rounded-lg text-gray-400 active:bg-gray-100"

@@ -3,6 +3,7 @@ import NoteList from './components/NoteList';
 import NoteEditor from './components/NoteEditor';
 import Sidebar from './components/Sidebar';
 import Settings from './components/Settings';
+import CalendarView from './components/CalendarView';
 import { now } from './db';
 import type { Note, FilterType, DateFilter, View } from './types';
 
@@ -23,7 +24,7 @@ const DEFAULT_FILTERS: Filters = {
   deleted: false,
 };
 
-type AppView = View | 'settings';
+type AppView = View | 'settings' | 'calendar';
 
 function makeNewNote(): Note {
   const t = now();
@@ -64,13 +65,17 @@ export default function App() {
     setCurrentNote(null);
   }
 
-  // Page Paramètres — plein écran mobile, panneau droit desktop
+  const sidebar = (
+    <div className="hidden md:flex md:flex-col md:w-72 lg:w-80 border-r border-gray-200 bg-white shrink-0">
+      <Sidebar filters={filters} onFiltersChange={mergeFilters} onClose={() => {}} />
+    </div>
+  );
+
+  // ── Paramètres ───────────────────────────────────────────────────────────
   if (view === 'settings') {
     return (
       <div className="flex h-screen-safe overflow-hidden">
-        <div className="hidden md:flex md:flex-col md:w-72 lg:w-80 border-r border-gray-200 bg-white shrink-0">
-          <Sidebar filters={filters} onFiltersChange={mergeFilters} onClose={() => {}} />
-        </div>
+        {sidebar}
         <div className="flex flex-col flex-1 min-w-0">
           <Settings onBack={() => setView('list')} />
         </div>
@@ -78,27 +83,35 @@ export default function App() {
     );
   }
 
+  // ── Calendrier ───────────────────────────────────────────────────────────
+  if (view === 'calendar') {
+    return (
+      <div className="flex h-screen-safe overflow-hidden">
+        {sidebar}
+        <div className="flex flex-col flex-1 min-w-0">
+          <CalendarView
+            onSelectNote={note => { setCurrentNote(note); setView('editor'); }}
+            onBack={() => setView('list')}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Vue principale (liste + éditeur) ────────────────────────────────────
   return (
     <div className="flex h-screen-safe overflow-hidden">
-      {/* Desktop sidebar — toujours visible sur md+ */}
+      {/* Desktop sidebar */}
       <div className="hidden md:flex md:flex-col md:w-72 lg:w-80 border-r border-gray-200 bg-white shrink-0">
-        <Sidebar
-          filters={filters}
-          onFiltersChange={mergeFilters}
-          onClose={() => {}}
-        />
+        <Sidebar filters={filters} onFiltersChange={mergeFilters} onClose={() => {}} />
       </div>
 
-      {/* Sidebar mobile — overlay */}
+      {/* Sidebar mobile overlay */}
       {view === 'sidebar' && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/30" onClick={() => setView('list')} />
           <div className="absolute inset-y-0 right-0 w-80 max-w-full bg-white shadow-xl">
-            <Sidebar
-              filters={filters}
-              onFiltersChange={mergeFilters}
-              onClose={() => setView('list')}
-            />
+            <Sidebar filters={filters} onFiltersChange={mergeFilters} onClose={() => setView('list')} />
           </div>
         </div>
       )}
@@ -115,6 +128,7 @@ export default function App() {
           onNewNote={openNewNote}
           onOpenSidebar={() => setView('sidebar')}
           onOpenSettings={() => setView('settings')}
+          onOpenCalendar={() => setView('calendar')}
           filters={filters}
           onSearchChange={s => mergeFilters({ search: s })}
         />
