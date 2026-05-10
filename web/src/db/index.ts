@@ -177,3 +177,113 @@ export async function deleteFolder(id: number): Promise<void> {
 export async function getAllTags(): Promise<Tag[]> {
   return db.tags.toArray();
 }
+
+// ─── Export / Import ────────────────────────────────────────────────────────
+
+export interface ExportAttachment {
+  type: 'image' | 'audio' | 'video';
+  filename: string;
+  filepath: string;
+  duration?: number;
+}
+
+export interface ExportNote {
+  id: number;
+  title: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  is_deleted: boolean;
+  deleted_at?: string;
+  tags: { name: string; color: string }[];
+  attachments: ExportAttachment[];
+}
+
+export interface ExportData {
+  version: '1.0';
+  app: 'Noteor';
+  exported_at: string;
+  notes: ExportNote[];
+}
+
+export async function exportAllNotes(): Promise<ExportData> {
+  const notes = await db.notes.toArray();
+  const exportedNotes: ExportNote[] = [];
+
+  for (const note of notes) {
+    if (!note.id) continue;
+    const tags = await getNoteTags(note.id);
+    const attachments = await db.attachments
+      .where('note_id').equals(note.id).toArray();
+
+    exportedNotes.push({
+      id: note.id,
+      title: note.title,
+      content: note.content,
+      created_at: note.created_at,
+      updated_at: note.updated_at,
+      is_deleted: note.is_deleted,
+      deleted_at: note.deleted_at,
+      tags: tags.map(t => ({ name: t.name, color: t.color })),
+      attachments: attachments.map(a => ({
+        type: a.type,
+        filename: a.filename,
+        filepath: a.filename,
+        duration: a.duration,
+      })),
+    });
+  }
+
+  return {
+    version: '1.0',
+    app: 'Noteor',
+    exported_at: new Date().toISOString(),
+    notes: exportedNotes,
+  };
+}
+
+export async function importNotes(
+  data: ExportData
+): Promise<{ imported: number; skipped: number; errors: number }> {
+  let imported = 0;
+  let skipped = 0;
+  let errors = 0;
+
+  const existingIds = new Set(
+    (await db.notes.toArray()).map(n => n.id!)
+  );
+
+  for (const noteData of data.notes) {
+    try {
+      if (existingIds.has(noteData.id)) {
+        skipped++;
+        continue;
+      }
+
+      const newId = await db.notes.add({
+        title: noteData.title,
+        content: noteData.content,
+        created_at: noteData.created_at,
+        updated_at: noteData.updated_at,
+        is_deleted: noteData.is_deleted ?? false,
+        deleted_at: noteData.deleted_at,
+      } as Note);
+
+      for (const tagData of noteData.tags ?? []) {
+        let tag = await db.tags.where('name').equalsIgnoreCase(tagData.name).first();
+        if (!tag) {
+          const tagId = await db.tags.add({ name: tagData.name, color: tagData.color });
+          tag = { id: tagId, name: tagData.name, color: tagData.color };
+        }
+        const exists = await db.note_tags.get([newId, tag.id!]);
+        if (!exists) await db.note_tags.add({ note_id: newId, tag_id: tag.id! });
+      }
+
+      imported++;
+    } catch {
+      errors++;
+    }
+  }
+
+  return { imported, skipped, errors };
+}

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Key, RefreshCw, Check, AlertCircle, ExternalLink } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, Key, RefreshCw, Check, AlertCircle, ExternalLink, Upload, Download, FileJson } from 'lucide-react';
 import { fetchFreeModels, loadSettings, saveSettings, type OpenRouterModel } from '../services/openrouter';
+import { exportAllNotes, importNotes, type ExportData } from '../db';
 
 interface Props {
   onBack: () => void;
@@ -13,6 +14,10 @@ export default function Settings({ onBack }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const [importStatus, setImportStatus] = useState<{ imported: number; skipped: number; errors: number } | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const s = loadSettings();
@@ -39,6 +44,46 @@ export default function Settings({ onBack }: Props) {
     saveSettings({ openrouterKey: apiKey.trim(), selectedModel });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const data = await exportAllNotes();
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const date = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `noteor-export-${date}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportStatus(null);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text) as ExportData;
+      if (data.app !== 'Noteor' || !Array.isArray(data.notes)) {
+        throw new Error('Format de fichier invalide. Attendu : export Noteor JSON.');
+      }
+      const result = await importNotes(data);
+      setImportStatus(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur lors de l\'import.');
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
   }
 
   const supportsAudio = (m: OpenRouterModel) =>
@@ -168,7 +213,64 @@ export default function Settings({ onBack }: Props) {
           </section>
         )}
 
-        {/* Info */}
+        {/* ── Import / Export ── */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+              <FileJson size={16} className="text-emerald-600" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-800">Sauvegarde</h2>
+              <p className="text-xs text-gray-500">Exporter ou importer vos notes au format JSON</p>
+            </div>
+          </div>
+
+          {/* Export */}
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl border border-emerald-200 text-emerald-700 text-sm font-medium active:bg-emerald-50 disabled:opacity-50 mb-2"
+          >
+            <Download size={16} className={exporting ? 'animate-bounce' : ''} />
+            {exporting ? 'Export en cours...' : 'Exporter toutes les notes (.json)'}
+          </button>
+
+          {/* Import */}
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            onChange={handleImportFile}
+            className="hidden"
+          />
+          <button
+            onClick={() => importInputRef.current?.click()}
+            disabled={importing}
+            className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 text-sm font-medium active:bg-gray-50 disabled:opacity-50"
+          >
+            <Upload size={16} className={importing ? 'animate-spin' : ''} />
+            {importing ? 'Import en cours...' : 'Importer un fichier JSON Noteor'}
+          </button>
+
+          {/* Résultat import */}
+          {importStatus && (
+            <div className="mt-3 px-4 py-3 bg-emerald-50 rounded-xl border border-emerald-100 space-y-1">
+              <p className="text-sm font-medium text-emerald-700">Import terminé</p>
+              <p className="text-xs text-emerald-600">
+                {importStatus.imported} note{importStatus.imported !== 1 ? 's' : ''} importée{importStatus.imported !== 1 ? 's' : ''}
+                {importStatus.skipped > 0 && ` · ${importStatus.skipped} déjà présente${importStatus.skipped !== 1 ? 's' : ''} (ignorée${importStatus.skipped !== 1 ? 's' : ''})`}
+                {importStatus.errors > 0 && ` · ${importStatus.errors} erreur${importStatus.errors !== 1 ? 's' : ''}`}
+              </p>
+            </div>
+          )}
+
+          <p className="text-xs text-gray-400 mt-2.5 leading-relaxed">
+            L'export inclut le texte, les tags et les noms des fichiers audio/images.
+            Les fichiers média ne sont pas inclus dans l'export.
+          </p>
+        </section>
+
+        {/* Info OpenRouter */}
         <section className="bg-gray-50 rounded-xl p-4">
           <p className="text-xs text-gray-500 leading-relaxed">
             La clé API et le modèle sont stockés <strong>localement sur cet appareil</strong>.
