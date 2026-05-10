@@ -178,6 +178,10 @@ export async function getAllTags(): Promise<Tag[]> {
   return db.tags.toArray();
 }
 
+export async function findNoteByTitle(title: string): Promise<Note | undefined> {
+  return db.notes.filter(n => !n.is_deleted && n.title.toLowerCase() === title.toLowerCase()).first();
+}
+
 // ─── Opérations en masse ─────────────────────────────────────────────────────
 
 export async function moveNotesBulk(

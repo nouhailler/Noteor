@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Save, Bold, Italic, Code, List, Heading2, Eye, EyeOff, Image as ImageIcon, Trash2, X, Plus, Sparkles, Loader2, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Save, Bold, Italic, Code, List, Heading2, Eye, EyeOff, Image as ImageIcon, Trash2, X, Plus, Sparkles, Loader2, HelpCircle, Link2 } from 'lucide-react';
 import HelpModal from './HelpModal';
 
 const HELP_SECTIONS = [
@@ -10,6 +10,15 @@ const HELP_SECTIONS = [
       { label: 'Contenu Markdown', description: 'Zone de texte principale. Utilise la syntaxe Markdown pour le formatage.' },
       { label: 'Aperçu', description: 'Bouton "Aperçu" (œil) pour basculer entre l\'édition et le rendu visuel.' },
       { label: 'Auto-sauvegarde', description: 'La note est enregistrée automatiquement 2,5 secondes après la dernière frappe.' },
+    ],
+  },
+  {
+    title: 'Wikilinks',
+    items: [
+      { label: 'Syntaxe', description: 'Écrire [[Titre de la note]] pour créer un lien interne vers une autre note.' },
+      { label: 'Autocomplétion', description: 'Dès que vous tapez [[, une liste de notes apparaît pour compléter rapidement.' },
+      { label: 'Aperçu', description: 'En mode aperçu, les wikilinks vers des notes existantes sont en bleu, en rouge sinon.' },
+      { label: 'Navigation', description: 'Cliquer sur un wikilink en aperçu ouvre directement la note liée.' },
     ],
   },
   {
@@ -39,9 +48,11 @@ const HELP_SECTIONS = [
     ],
   },
 ];
+
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { saveNote, getNoteTags, addTagToNote, removeTagFromNote, getNoteAttachments, addAttachment, deleteAttachment, now } from '../db';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db, saveNote, getNoteTags, addTagToNote, removeTagFromNote, getNoteAttachments, addAttachment, deleteAttachment, now } from '../db';
 import { AudioRecorderButton, AudioPlayer } from './AudioRecorder';
 import TagChip from './TagChip';
 import { transcribeAudio, loadSettings } from '../services/openrouter';
@@ -52,9 +63,17 @@ interface Props {
   onBack: () => void;
   onSaved: (note: Note) => void;
   onTagClick: (tag: Tag) => void;
+  onWikilinkClick: (title: string) => void;
 }
 
-export default function NoteEditor({ note, onBack, onSaved, onTagClick }: Props) {
+// Convert [[Title]] to [Title](wikilink:Title) for ReactMarkdown
+function preprocessWikilinks(content: string): string {
+  return content.replace(/\[\[([^\][\n]+)\]\]/g, (_, title) =>
+    `[${title}](wikilink:${encodeURIComponent(title)})`
+  );
+}
+
+export default function NoteEditor({ note, onBack, onSaved, onTagClick, onWikilinkClick }: Props) {
   const [title, setTitle] = useState(note.title);
   const [content, setContent] = useState(note.content);
   const [preview, setPreview] = useState(false);
@@ -66,9 +85,19 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick }: Props)
   const [showHelp, setShowHelp] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [transcribeError, setTranscribeError] = useState('');
+  const [wikilinkQuery, setWikilinkQuery] = useState<string | null>(null);
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteIdRef = useRef<number | undefined>(note.id);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const allNotes = useLiveQuery(() => db.notes.filter(n => !n.is_deleted).toArray()) ?? [];
+
+  const wikilinkSuggestions = wikilinkQuery !== null
+    ? allNotes
+        .filter(n => n.id !== noteIdRef.current && n.title)
+        .filter(n => n.title.toLowerCase().includes(wikilinkQuery.toLowerCase()))
+        .slice(0, 6)
+    : [];
 
   useEffect(() => {
     setTitle(note.title);
@@ -113,6 +142,47 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick }: Props)
     setTimeout(() => {
       ta.focus();
       ta.setSelectionRange(start + before.length, start + before.length + selected.length);
+    }, 0);
+  }
+
+  function handleContentChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const val = e.target.value;
+    const cursor = e.target.selectionStart;
+    setContent(val);
+    markDirty();
+
+    const before = val.slice(0, cursor);
+    const match = before.match(/\[\[([^\][\n]*)$/);
+    setWikilinkQuery(match ? match[1] : null);
+  }
+
+  function handleTextareaKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (wikilinkQuery === null) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setWikilinkQuery(null);
+    } else if (e.key === 'Enter' && wikilinkSuggestions.length > 0) {
+      e.preventDefault();
+      insertWikilink(wikilinkSuggestions[0].title);
+    }
+  }
+
+  function insertWikilink(noteTitle: string) {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const cursor = ta.selectionStart;
+    const before = content.slice(0, cursor);
+    const match = before.match(/\[\[([^\][\n]*)$/);
+    if (!match) return;
+    const start = cursor - match[0].length;
+    const newContent = content.slice(0, start) + `[[${noteTitle}]]` + content.slice(cursor);
+    setContent(newContent);
+    setDirty(true);
+    setWikilinkQuery(null);
+    setTimeout(() => {
+      ta.focus();
+      const newPos = start + noteTitle.length + 4;
+      ta.setSelectionRange(newPos, newPos);
     }, 0);
   }
 
@@ -281,6 +351,13 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick }: Props)
         <button onClick={() => insertMarkdown('`', '`')} className="p-1.5 rounded text-gray-600 active:bg-gray-100"><Code size={16} /></button>
         <button onClick={() => insertMarkdown('\n- ')} className="p-1.5 rounded text-gray-600 active:bg-gray-100"><List size={16} /></button>
         <button onClick={() => insertMarkdown('\n## ')} className="p-1.5 rounded text-gray-600 active:bg-gray-100"><Heading2 size={16} /></button>
+        <button
+          onClick={() => insertMarkdown('[[', ']]')}
+          className="p-1.5 rounded text-indigo-500 active:bg-indigo-50"
+          title="Wikilink [[…]]"
+        >
+          <Link2 size={16} />
+        </button>
         <div className="flex-1" />
         <button
           onClick={() => setPreview(p => !p)}
@@ -295,18 +372,85 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick }: Props)
       <div className="flex-1 overflow-y-auto">
         {preview ? (
           <div className="px-4 py-3 prose prose-sm max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content || '*Aucun contenu*'}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                a: ({ href, children }) => {
+                  if (href?.startsWith('wikilink:')) {
+                    const noteTitle = decodeURIComponent(href.slice('wikilink:'.length));
+                    const exists = allNotes.some(n => n.title.toLowerCase() === noteTitle.toLowerCase());
+                    return (
+                      <button
+                        onClick={() => onWikilinkClick(noteTitle)}
+                        className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-sm font-medium no-underline transition-colors
+                          ${exists
+                            ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'
+                            : 'text-red-500 bg-red-50 hover:bg-red-100'
+                          }`}
+                        title={exists ? `Ouvrir « ${noteTitle} »` : `Note introuvable : « ${noteTitle} »`}
+                      >
+                        <Link2 size={11} className="shrink-0" />
+                        {children}
+                        {!exists && <span className="text-[9px] font-bold">?</span>}
+                      </button>
+                    );
+                  }
+                  return <a href={href} target="_blank" rel="noopener noreferrer">{children as React.ReactNode}</a>;
+                },
+              }}
+            >
+              {preprocessWikilinks(content) || '*Aucun contenu*'}
+            </ReactMarkdown>
           </div>
         ) : (
           <textarea
             ref={textareaRef}
             value={content}
-            onChange={e => { setContent(e.target.value); markDirty(); }}
-            placeholder="Commencez à écrire en Markdown..."
+            onChange={handleContentChange}
+            onKeyDown={handleTextareaKeyDown}
+            onBlur={() => {
+              // Delay so onMouseDown on a suggestion fires first
+              setTimeout(() => setWikilinkQuery(null), 150);
+            }}
+            placeholder="Commencez à écrire en Markdown…"
             className="w-full h-full px-4 py-3 text-sm text-gray-800 placeholder-gray-300 outline-none resize-none bg-transparent font-mono leading-relaxed"
           />
         )}
       </div>
+
+      {/* Wikilink autocomplete panel */}
+      {wikilinkQuery !== null && !preview && (
+        <div className="border-t border-indigo-100 bg-white shadow-lg max-h-52 overflow-y-auto">
+          <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-indigo-50">
+            <Link2 size={12} className="text-indigo-400 shrink-0" />
+            <span className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wide">
+              Wikilink — {wikilinkQuery ? `"${wikilinkQuery}"` : 'tapez pour filtrer…'}
+            </span>
+            <button
+              onMouseDown={e => { e.preventDefault(); setWikilinkQuery(null); }}
+              className="ml-auto text-gray-400 hover:text-gray-600 active:opacity-70"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          {wikilinkSuggestions.length === 0 ? (
+            <div className="px-4 py-3 text-xs text-gray-400">
+              {wikilinkQuery ? 'Aucune note trouvée.' : 'Commencez à taper un titre…'}
+            </div>
+          ) : (
+            wikilinkSuggestions.map(n => (
+              <button
+                key={n.id}
+                onMouseDown={e => { e.preventDefault(); insertWikilink(n.title); }}
+                className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-left hover:bg-indigo-50 active:bg-indigo-100 transition-colors border-b border-gray-50 last:border-0"
+              >
+                <Link2 size={13} className="text-indigo-400 shrink-0" />
+                <span className="truncate text-gray-800">{n.title}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
 
       {/* Attachments */}
       {attachments.length > 0 && (
@@ -342,7 +486,6 @@ export default function NoteEditor({ note, onBack, onSaved, onTagClick }: Props)
           <span className="text-sm">Photo</span>
         </button>
 
-        {/* Bouton IA — visible seulement si enregistrement audio présent */}
         {attachments.some(a => a.type === 'audio') && (
           <button
             onClick={handleTranscribe}

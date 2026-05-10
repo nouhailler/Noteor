@@ -4,7 +4,7 @@ import NoteEditor from './components/NoteEditor';
 import Sidebar from './components/Sidebar';
 import Settings from './components/Settings';
 import CalendarView from './components/CalendarView';
-import { now } from './db';
+import { now, findNoteByTitle } from './db';
 import type { Note, FilterType, DateFilter, View } from './types';
 
 interface Filters {
@@ -63,6 +63,14 @@ export default function App() {
     mergeFilters({ tagId: tag.id, categoryId: undefined, folderId: undefined });
     setView('list');
     setCurrentNote(null);
+  }
+
+  async function handleWikilinkClick(title: string) {
+    const found = await findNoteByTitle(title);
+    if (found) {
+      setCurrentNote(found);
+      setView('editor');
+    }
   }
 
   const sidebar = (
@@ -147,6 +155,7 @@ export default function App() {
             onBack={handleBack}
             onSaved={handleSaved}
             onTagClick={handleTagClick}
+            onWikilinkClick={handleWikilinkClick}
           />
         ) : (
           <div className="hidden md:flex flex-1 items-center justify-center text-gray-300">
