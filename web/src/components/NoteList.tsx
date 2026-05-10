@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, SlidersHorizontal, Mic, Image, Video, Trash2, RotateCcw } from 'lucide-react';
+import { Search, Plus, SlidersHorizontal, Mic, Image, Video, Trash2, RotateCcw, Settings } from 'lucide-react';
 import { db, getNotes, restoreNote, permanentlyDeleteNote } from '../db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Note, FilterType, DateFilter } from '../types';
@@ -9,6 +9,7 @@ interface Props {
   onSelectNote: (note: Note) => void;
   onNewNote: () => void;
   onOpenSidebar: () => void;
+  onOpenSettings: () => void;
   filters: {
     search: string;
     categoryId?: number;
@@ -26,6 +27,7 @@ export default function NoteList({
   onSelectNote,
   onNewNote,
   onOpenSidebar,
+  onOpenSettings,
   filters,
   onSearchChange,
 }: Props) {
@@ -90,6 +92,13 @@ export default function NoteList({
         <h1 className="text-lg font-bold text-indigo-600 flex-1">
           {filters.deleted ? 'Corbeille' : 'Noteor'}
         </h1>
+        <button
+          onClick={onOpenSettings}
+          className="p-2 rounded-lg text-gray-400 active:bg-gray-100"
+          aria-label="Paramètres"
+        >
+          <Settings size={19} />
+        </button>
         <button
           onClick={onOpenSidebar}
           className="p-2 rounded-lg text-gray-500 active:bg-gray-100 relative"

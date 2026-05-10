@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Save, Bold, Italic, Code, List, Heading2, Eye, EyeOff, Image as ImageIcon, Trash2, X, Plus } from 'lucide-react';
+import { ArrowLeft, Save, Bold, Italic, Code, List, Heading2, Eye, EyeOff, Image as ImageIcon, Trash2, X, Plus, Sparkles, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { saveNote, getNoteTags, addTagToNote, removeTagFromNote, getNoteAttachments, addAttachment, deleteAttachment, now } from '../db';
 import { AudioRecorderButton, AudioPlayer } from './AudioRecorder';
 import TagChip from './TagChip';
+import { transcribeAudio, loadSettings } from '../services/openrouter';
 import type { Note, Tag, Attachment } from '../types';
 
 interface Props {
@@ -22,6 +23,8 @@ export default function NoteEditor({ note, onBack, onSaved }: Props) {
   const [showTagInput, setShowTagInput] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dirty, setDirty] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcribeError, setTranscribeError] = useState('');
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteIdRef = useRef<number | undefined>(note.id);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -128,6 +131,39 @@ export default function NoteEditor({ note, onBack, onSaved }: Props) {
   async function handleDeleteAttachment(id: number) {
     await deleteAttachment(id);
     setAttachments(prev => prev.filter(a => a.id !== id));
+  }
+
+  async function handleTranscribe() {
+    const audioAttachments = attachments.filter(a => a.type === 'audio');
+    if (!audioAttachments.length) return;
+
+    const { openrouterKey, selectedModel } = loadSettings();
+    if (!openrouterKey || !selectedModel) {
+      setTranscribeError('Configure ta clé API et un modèle dans les Paramètres.');
+      setTimeout(() => setTranscribeError(''), 4000);
+      return;
+    }
+
+    setTranscribing(true);
+    setTranscribeError('');
+    try {
+      const results: string[] = [];
+      for (const att of audioAttachments) {
+        const text = await transcribeAudio(att.data, selectedModel, openrouterKey);
+        if (text) results.push(text);
+      }
+      if (results.length) {
+        const insertion = '\n\n' + results.join('\n\n');
+        setContent(prev => prev + insertion);
+        setDirty(true);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Erreur de transcription';
+      setTranscribeError(msg);
+      setTimeout(() => setTranscribeError(''), 5000);
+    } finally {
+      setTranscribing(false);
+    }
   }
 
   return (
@@ -240,6 +276,13 @@ export default function NoteEditor({ note, onBack, onSaved }: Props) {
         </div>
       )}
 
+      {/* Erreur transcription */}
+      {transcribeError && (
+        <div className="mx-4 mb-2 px-3 py-2 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600">
+          {transcribeError}
+        </div>
+      )}
+
       {/* Bottom action bar */}
       <div className="flex items-center gap-2 px-4 py-2 border-t border-gray-100 safe-bottom">
         <AudioRecorderButton onSave={handleAudioSave} />
@@ -250,6 +293,24 @@ export default function NoteEditor({ note, onBack, onSaved }: Props) {
           <ImageIcon size={16} />
           <span className="text-sm">Photo</span>
         </button>
+
+        {/* Bouton IA — visible seulement si enregistrement audio présent */}
+        {attachments.some(a => a.type === 'audio') && (
+          <button
+            onClick={handleTranscribe}
+            disabled={transcribing}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              transcribing
+                ? 'bg-indigo-100 text-indigo-400'
+                : 'bg-indigo-600 text-white active:bg-indigo-700'
+            }`}
+            title="Transcrire l'audio en texte via IA"
+          >
+            {transcribing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            IA
+          </button>
+        )}
+
         <div className="flex-1" />
         <button
           onClick={async () => {

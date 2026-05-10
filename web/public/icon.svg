@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#3730A3"/>
+    </linearGradient>
+    <linearGradient id="pencil" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FDE68A"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Fond arrondi -->
+  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+
+  <!-- Ombre portée du carnet -->
+  <rect x="140" y="108" width="252" height="320" rx="20" fill="#1E1B4B" opacity="0.25" transform="translate(8,8)"/>
+
+  <!-- Corps du carnet (page blanche) -->
+  <rect x="140" y="100" width="252" height="320" rx="20" fill="#FFFFFF"/>
+
+  <!-- Reliure spirale (bande gauche) -->
+  <rect x="140" y="100" width="56" height="320" rx="20" fill="#818CF8"/>
+  <rect x="164" y="100" width="32" height="320" fill="#818CF8"/>
+
+  <!-- Trous de reliure -->
+  <circle cx="170" cy="176" r="15" fill="#4338CA"/>
+  <circle cx="170" cy="260" r="15" fill="#4338CA"/>
+  <circle cx="170" cy="344" r="15" fill="#4338CA"/>
+
+  <!-- Reflets sur les trous -->
+  <circle cx="165" cy="171" r="5" fill="#A5B4FC" opacity="0.6"/>
+  <circle cx="165" cy="255" r="5" fill="#A5B4FC" opacity="0.6"/>
+  <circle cx="165" cy="339" r="5" fill="#A5B4FC" opacity="0.6"/>
+
+  <!-- Lignes de texte sur la page -->
+  <rect x="218" y="164" width="152" height="11" rx="5.5" fill="#E0E7FF"/>
+  <rect x="218" y="200" width="152" height="11" rx="5.5" fill="#E0E7FF"/>
+  <rect x="218" y="236" width="152" height="11" rx="5.5" fill="#E0E7FF"/>
+  <rect x="218" y="272" width="120" height="11" rx="5.5" fill="#EEF2FF"/>
+
+  <!-- Crayon qui dépasse en bas à droite -->
+  <!-- Corps du crayon, rotation -40° autour du bas -->
+  <g transform="translate(340,360) rotate(-40)">
+    <!-- Gomme -->
+    <rect x="-14" y="-140" width="28" height="22" rx="4" fill="#FCA5A5"/>
+    <!-- Bague métallique -->
+    <rect x="-14" y="-118" width="28" height="10" fill="#D1D5DB"/>
+    <!-- Corps jaune -->
+    <rect x="-14" y="-108" width="28" height="108" rx="3" fill="url(#pencil)"/>
+    <!-- Facette avant (reflet) -->
+    <rect x="-7" y="-108" width="8" height="108" rx="2" fill="#FEF3C7" opacity="0.5"/>
+    <!-- Bois (transition vers pointe) -->
+    <path d="M-14 0 L14 0 L8 28 L-8 28 Z" fill="#D97706"/>
+    <!-- Pointe graphite -->
+    <path d="M-8 28 L8 28 L0 48 Z" fill="#374151"/>
+  </g>
+</svg>

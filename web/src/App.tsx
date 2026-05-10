@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import NoteList from './components/NoteList';
 import NoteEditor from './components/NoteEditor';
 import Sidebar from './components/Sidebar';
+import Settings from './components/Settings';
 import { now } from './db';
 import type { Note, FilterType, DateFilter, View } from './types';
 
@@ -22,13 +23,15 @@ const DEFAULT_FILTERS: Filters = {
   deleted: false,
 };
 
+type AppView = View | 'settings';
+
 function makeNewNote(): Note {
   const t = now();
   return { title: '', content: '', is_deleted: false, created_at: t, updated_at: t };
 }
 
 export default function App() {
-  const [view, setView] = useState<View>('list');
+  const [view, setView] = useState<AppView>('list');
   const [currentNote, setCurrentNote] = useState<Note | null>(null);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
 
@@ -55,14 +58,24 @@ export default function App() {
     setCurrentNote(null);
   }
 
-  // Desktop: 3-column layout
-  // Mobile: single panel with view state
+  // Page Paramètres — plein écran mobile, panneau droit desktop
+  if (view === 'settings') {
+    return (
+      <div className="flex h-screen-safe overflow-hidden">
+        <div className="hidden md:flex md:flex-col md:w-72 lg:w-80 border-r border-gray-200 bg-white shrink-0">
+          <Sidebar filters={filters} onFiltersChange={mergeFilters} onClose={() => {}} />
+        </div>
+        <div className="flex flex-col flex-1 min-w-0">
+          <Settings onBack={() => setView('list')} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen-safe overflow-hidden">
-      {/* Desktop sidebar — always visible on md+ */}
-      <div className={`
-        hidden md:flex md:flex-col md:w-72 lg:w-80 border-r border-gray-200 bg-white shrink-0
-      `}>
+      {/* Desktop sidebar — toujours visible sur md+ */}
+      <div className="hidden md:flex md:flex-col md:w-72 lg:w-80 border-r border-gray-200 bg-white shrink-0">
         <Sidebar
           filters={filters}
           onFiltersChange={mergeFilters}
@@ -70,7 +83,7 @@ export default function App() {
         />
       </div>
 
-      {/* Mobile sidebar — overlay */}
+      {/* Sidebar mobile — overlay */}
       {view === 'sidebar' && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/30" onClick={() => setView('list')} />
@@ -84,7 +97,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Note list — visible on list view (mobile) or always (desktop) */}
+      {/* Liste des notes */}
       <div className={`
         flex-col w-full md:flex md:w-80 lg:w-96 border-r border-gray-200 shrink-0
         ${view === 'list' || view === 'sidebar' ? 'flex' : 'hidden'}
@@ -95,12 +108,13 @@ export default function App() {
           onSelectNote={openNote}
           onNewNote={openNewNote}
           onOpenSidebar={() => setView('sidebar')}
+          onOpenSettings={() => setView('settings')}
           filters={filters}
           onSearchChange={s => mergeFilters({ search: s })}
         />
       </div>
 
-      {/* Editor — full screen on mobile, right panel on desktop */}
+      {/* Éditeur */}
       <div className={`
         flex-col flex-1 min-w-0
         ${view === 'editor' ? 'flex' : 'hidden'}
@@ -116,7 +130,7 @@ export default function App() {
         ) : (
           <div className="hidden md:flex flex-1 items-center justify-center text-gray-300">
             <div className="text-center">
-              <p className="text-5xl mb-3">📝</p>
+              <img src="/icon.svg" alt="Noteor" className="w-20 h-20 mx-auto mb-4 opacity-30" />
               <p className="text-sm">Sélectionnez une note ou créez-en une</p>
             </div>
           </div>
