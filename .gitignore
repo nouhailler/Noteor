@@ -20,6 +20,9 @@ media/
 *.jpg
 *.jpeg
 
+# Exception : captures d'écran du README (versionnées)
+!docs/screenshots/*.png
+
 # IDE / outils
 .vscode/
 .idea/

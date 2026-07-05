@@ -28,6 +28,54 @@
 
 ---
 
+## 📸 Captures d'écran
+
+<div align="center">
+
+### 🖥️ Version web — bureau
+
+<img src="docs/screenshots/01-notes-preview.png" alt="Trois panneaux : filtres, liste des notes et éditeur avec aperçu Markdown" width="100%">
+
+<sub>Trois panneaux — filtres & organisation · liste des notes · éditeur avec **aperçu Markdown** en temps réel, wikilinks et **backlinks** automatiques.</sub>
+
+<br><br>
+
+<img src="docs/screenshots/02-markdown-editor.png" alt="Éditeur Markdown avec barre de formatage et wikilinks" width="100%">
+
+<sub>Mode édition — barre de formatage (gras, italique, code, liste, titre, lien) et liens `[[Note]]`.</sub>
+
+<br><br>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/03-graph.png" alt="Vue graphique des liens entre notes" width="100%"></td>
+<td width="50%"><img src="docs/screenshots/04-calendar.png" alt="Vue calendrier des notes" width="100%"></td>
+</tr>
+<tr>
+<td align="center"><sub><b>Graph View</b> — visualisation interactive des liens (zoom, déplacement, clic pour ouvrir).</sub></td>
+<td align="center"><sub><b>Calendrier</b> — notes réparties par date, colorées selon leur catégorie.</sub></td>
+</tr>
+</table>
+
+<br>
+
+### 📱 Version web — mobile (PWA)
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/05-mobile-list.png" alt="Liste des notes sur mobile" width="100%"></td>
+<td width="50%"><img src="docs/screenshots/06-mobile-editor.png" alt="Éditeur de note sur mobile" width="100%"></td>
+</tr>
+<tr>
+<td align="center"><sub>Liste des notes — bandes de couleur par catégorie, indicateurs 🎤 audio / 🖼 image.</sub></td>
+<td align="center"><sub>Éditeur plein écran — tags, aperçu Markdown et backlinks.</sub></td>
+</tr>
+</table>
+
+</div>
+
+---
+
 ## 📱 Version web — React + PWA
 
 ### Fonctionnalités
